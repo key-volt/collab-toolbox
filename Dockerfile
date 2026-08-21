@@ -30,6 +30,9 @@ RUN set -eux; \
 WORKDIR /app/backend
 COPY backend/pyproject.toml ./
 RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python -r pyproject.toml
+# An install that resolves is not yet an install that works: every runtime dependency
+# must actually import, so a gap fails the build with its name instead of the container.
+RUN /app/.venv/bin/python -c "import aiosqlite, alembic, argon2, defusedxml, fastapi, jwt, pycrdt, pycrdt.websocket, pydantic_settings, python_multipart, sqlalchemy, uvicorn"
 COPY backend/app ./app
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/migrations ./migrations

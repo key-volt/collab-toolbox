@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import AdminUser, SessionDep, WhitelistedUser
 from app.config import get_settings
-from app.models import Document, Page, Upload
+from app.models import Document, Page, Upload, new_id
 from app.storage import docs, trash, versions
 from app.tools.registry import get_tool
 
@@ -119,7 +119,9 @@ async def create_document(
     if tool is None:
         raise HTTPException(status_code=422, detail="unknown tool")
     settings = get_settings()
-    document = Document(tool=tool.slug, title=body.title.strip())
+    # The id is needed before the first flush (the folder name embeds it), so it cannot
+    # come from the column default.
+    document = Document(id=new_id(), tool=tool.slug, title=body.title.strip())
     document.dir_name = docs.dir_name_for(document.title, document.id)
     await asyncio.to_thread(
         docs.create_document_dir, settings, document.dir_name, tool.initial_files()

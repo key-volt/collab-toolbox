@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse
 
 from app.auth.deps import SessionDep, WhitelistedUser
 from app.config import get_settings
-from app.models import Document, Upload
+from app.models import Document, Upload, new_id
 from app.storage import uploads
 
 router = APIRouter(prefix="/files")
@@ -44,7 +44,9 @@ async def upload_file(
         raise HTTPException(status_code=415, detail="file type is not supported")
     if document_id is not None and await session.get(Document, document_id) is None:
         raise HTTPException(status_code=404, detail="no such document")
-    row = Upload(document_id=document_id, mime=mime, bytes=len(content))
+    # The id is the filename on disk and is used before the first flush, so it cannot
+    # come from the column default.
+    row = Upload(id=new_id(), document_id=document_id, mime=mime, bytes=len(content))
     await asyncio.to_thread(uploads.save_upload, settings.uploads_dir, row.id, content)
     session.add(row)
     await session.commit()

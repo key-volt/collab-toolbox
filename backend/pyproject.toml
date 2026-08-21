@@ -65,7 +65,7 @@ strict = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["defusedxml", "defusedxml.*", "pycrdt_websocket", "pycrdt_websocket.*"]
+module = ["defusedxml", "defusedxml.*", "pycrdt.websocket", "pycrdt.websocket.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

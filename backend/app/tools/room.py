@@ -12,8 +12,10 @@ database at connect time rather than trusted from the token.
 import contextlib
 import logging
 
+from anyio import Lock
 from fastapi import WebSocket
-from pycrdt_websocket import WebsocketServer
+from pycrdt import Channel
+from pycrdt.websocket import WebsocketServer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.websockets import WebSocketDisconnect
 
@@ -30,31 +32,35 @@ CLOSE_FORBIDDEN = 4403
 CLOSE_NOT_FOUND = 4404
 
 
-class StarletteWebsocket:
-    """Adapts a Starlette websocket to the interface the room server drives."""
+class StarletteWebsocket(Channel):
+    """Adapts a Starlette websocket to the channel the room server drives.
+
+    Shaped after the adapter the library itself ships: sends are serialized behind a
+    lock because a room broadcasts to many clients concurrently, and any receive error
+    simply ends the iteration — the handler's cleanup does the rest.
+    """
 
     def __init__(self, websocket: WebSocket, path: str) -> None:
         self._websocket = websocket
         self._path = path
+        self._send_lock = Lock()
 
     @property
     def path(self) -> str:
         return self._path
 
-    def __aiter__(self) -> "StarletteWebsocket":
-        return self
-
     async def __anext__(self) -> bytes:
         try:
-            return await self._websocket.receive_bytes()
-        except WebSocketDisconnect:
+            return await self.recv()
+        except Exception:
             raise StopAsyncIteration from None
 
     async def send(self, message: bytes) -> None:
-        await self._websocket.send_bytes(message)
+        async with self._send_lock:
+            await self._websocket.send_bytes(message)
 
     async def recv(self) -> bytes:
-        return await self._websocket.receive_bytes()
+        return bytes(await self._websocket.receive_bytes())
 
 
 def _handle_room_exception(exception: Exception, log: logging.Logger) -> bool:

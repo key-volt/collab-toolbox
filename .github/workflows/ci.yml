@@ -74,6 +74,15 @@ jobs:
           uv venv
           uv pip install --python .venv/bin/python -r pyproject.toml --extra dev
 
+      # An install that resolves is not yet an install that works: every runtime
+      # dependency must actually import, so a gap fails here with its name instead of
+      # surfacing later as a crash.
+      - name: Verify the environment
+        run: >
+          .venv/bin/python -c "import aiosqlite, alembic, argon2, defusedxml, fastapi,
+          jwt, pycrdt, pycrdt.websocket, pydantic_settings, python_multipart, sqlalchemy,
+          uvicorn"
+
       - name: Lint
         run: |
           .venv/bin/ruff check .
