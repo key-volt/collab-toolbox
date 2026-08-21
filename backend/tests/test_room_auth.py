@@ -34,18 +34,14 @@ def _create_document(client: TestClient, token: str) -> str:
     return doc_id
 
 
-def test_a_connection_without_a_token_is_rejected(
-    client: TestClient, member_token: str
-) -> None:
+def test_a_connection_without_a_token_is_rejected(client: TestClient, member_token: str) -> None:
     doc_id = _create_document(client, member_token)
 
     with pytest.raises(REJECTED), client.websocket_connect(f"/ws/paint/{doc_id}"):
         pass
 
 
-def test_a_connection_with_a_bad_token_is_rejected(
-    client: TestClient, member_token: str
-) -> None:
+def test_a_connection_with_a_bad_token_is_rejected(client: TestClient, member_token: str) -> None:
     doc_id = _create_document(client, member_token)
 
     with (

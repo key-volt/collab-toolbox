@@ -156,9 +156,7 @@ async def create_document(
 
 
 @router.get("/{doc_id}")
-async def read_document(
-    doc_id: str, _user: WhitelistedUser, session: SessionDep
-) -> DocumentDetail:
+async def read_document(doc_id: str, _user: WhitelistedUser, session: SessionDep) -> DocumentDetail:
     document = await _get_document(session, doc_id)
     result = await session.execute(
         select(Page).where(Page.document_id == doc_id).order_by(Page.ordinal)

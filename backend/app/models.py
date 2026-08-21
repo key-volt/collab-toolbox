@@ -30,9 +30,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
-    username: Mapped[str] = mapped_column(
-        String(collation="NOCASE"), nullable=False, unique=True
-    )
+    username: Mapped[str] = mapped_column(String(collation="NOCASE"), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_whitelisted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

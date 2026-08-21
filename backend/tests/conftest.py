@@ -41,9 +41,7 @@ def client(booted: Path) -> Iterator[TestClient]:
 
 
 def login(client: TestClient, username: str, password: str) -> str:
-    response = client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    )
+    response = client.post("/api/auth/login", json={"username": username, "password": password})
     assert response.status_code == 200, response.text
     token = response.json()["access_token"]
     assert isinstance(token, str)

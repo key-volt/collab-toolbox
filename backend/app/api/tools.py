@@ -88,8 +88,7 @@ async def push_snapshot(
         select(Page).where(Page.document_id == doc_id).order_by(Page.ordinal)
     )
     current = [
-        (page.ordinal, page.title, page.filename, page.page_index)
-        for page in existing.scalars()
+        (page.ordinal, page.title, page.filename, page.page_index) for page in existing.scalars()
     ]
     wanted = [(spec.ordinal, spec.title, spec.filename, spec.page_index) for spec in snapshot.pages]
     if current != wanted:

@@ -45,9 +45,7 @@ def _versions_of(versions_dir: Path, filename: str) -> list[Path]:
     return sorted(matches, key=lambda path: path.name, reverse=True)
 
 
-def write_snapshot(
-    doc_dir: Path, filename: str, content: bytes, keep: int, days: int
-) -> bool:
+def write_snapshot(doc_dir: Path, filename: str, content: bytes, keep: int, days: int) -> bool:
     """Write the current file, and a version entry when the content actually changed."""
     current = doc_dir / filename
     scratch = doc_dir / f".{filename}.tmp"

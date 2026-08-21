@@ -118,9 +118,7 @@ def test_malformed_snapshots_are_refused(client: TestClient, member_token: str) 
     assert entity_attack.status_code == 422
 
 
-def test_a_snapshot_for_the_wrong_tool_is_refused(
-    client: TestClient, member_token: str
-) -> None:
+def test_a_snapshot_for_the_wrong_tool_is_refused(client: TestClient, member_token: str) -> None:
     doc_id = _create(client, member_token, "paint", "Board")
 
     response = client.post(

@@ -6,9 +6,7 @@ from tests.conftest import bearer
 PNG = b"\x89PNG\r\n\x1a\n" + b"payload-bytes-for-the-round-trip"
 
 
-def test_uploads_round_trip_with_the_sniffed_type(
-    client: TestClient, member_token: str
-) -> None:
+def test_uploads_round_trip_with_the_sniffed_type(client: TestClient, member_token: str) -> None:
     uploaded = client.post(
         "/api/files",
         files={"file": ("anything.bin", PNG, "application/x-lie")},
