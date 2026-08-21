@@ -16,9 +16,9 @@ def test_health_reports_ok(data_dir: Path) -> None:
 
 
 def test_health_reports_unavailable_when_storage_is_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("DATA_DIR", str(tmp_path / "absent"))
+    monkeypatch.setenv("DATA_DIR", str(data_dir / "absent"))
     get_settings.cache_clear()
     try:
         with TestClient(create_app()) as client:

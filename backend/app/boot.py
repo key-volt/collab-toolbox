@@ -1,7 +1,8 @@
 """Steps that run before the server is allowed to accept traffic.
 
 Anything raising here stops the container instead of letting it serve a data directory or a
-database it could not prepare.
+database it could not prepare: copy the database aside, migrate, apply the administrator
+account, or exit non-zero without serving.
 """
 
 import sqlite3
@@ -9,6 +10,10 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from alembic import command
+from alembic.config import Config as AlembicConfig
+
+from app.auth.bootstrap import apply_admin
 from app.config import Settings, get_settings
 from app.db import PRAGMAS
 
@@ -55,6 +60,13 @@ def initialise_database(database_path: Path) -> None:
         connection.close()
 
 
+def run_migrations() -> None:
+    backend_dir = Path(__file__).resolve().parent.parent
+    config = AlembicConfig(str(backend_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "alembic"))
+    command.upgrade(config, "head")
+
+
 def main() -> int:
     settings = get_settings()
     ensure_layout(settings)
@@ -62,7 +74,17 @@ def main() -> int:
     if copy is not None:
         print(f"boot: database copied to {copy.name}", file=sys.stderr)
     initialise_database(settings.database_path)
-    print("boot: data directory and database ready", file=sys.stderr)
+    try:
+        run_migrations()
+    except Exception as exc:  # any migration failure must stop the container
+        print(f"boot: migration failed, refusing to serve: {exc}", file=sys.stderr)
+        return 1
+    try:
+        username = apply_admin(settings)
+    except (RuntimeError, sqlite3.Error) as exc:
+        print(f"boot: admin account failed, refusing to serve: {exc}", file=sys.stderr)
+        return 1
+    print(f"boot: schema current, administrator '{username}' applied", file=sys.stderr)
     return 0
 
 

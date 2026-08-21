@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart==0.0.32",
     "pycrdt==0.14.3",
     "pycrdt-websocket==0.16.4",
+    "defusedxml==0.7.1",
 ]
 
 [project.optional-dependencies]
@@ -51,13 +52,17 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"] # tests assert
+"tests/*" = ["S101", "S105", "S106"] # tests assert and carry throwaway passwords
 
 [tool.mypy]
 python_version = "3.12"
 files = ["app", "tests"]
 strict = true
 warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["defusedxml", "defusedxml.*", "pycrdt_websocket", "pycrdt_websocket.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import event, text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 PRAGMAS = (
     "PRAGMA journal_mode=WAL",
@@ -32,6 +37,10 @@ def create_engine(database_path: Path) -> AsyncEngine:
     engine = create_async_engine(f"sqlite+aiosqlite:///{database_path}")
     event.listen(engine.sync_engine, "connect", apply_pragmas)
     return engine
+
+
+def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def ping(engine: AsyncEngine) -> None:

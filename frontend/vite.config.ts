@@ -7,6 +7,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    rollupOptions: {
+      // Two pages: the application shell, and the diagram editor page that is served
+      // from /drawio/ and boots draw.io together with the collaboration bridge.
+      input: {
+        main: 'index.html',
+        editor: 'editor.html',
+      },
+    },
   },
   server: {
     // `npm run dev` serves the app; the API and rooms still come from the backend process.
@@ -18,5 +26,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
+    exclude: ['src/vendor/**'],
   },
 })

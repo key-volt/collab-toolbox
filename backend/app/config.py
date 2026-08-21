@@ -38,6 +38,22 @@ class Settings(BaseSettings):
 
     upload_max_mb: int = Field(default=25, ge=1)
 
+    def read_secret(self, name: str) -> str:
+        """Read a credential file mounted into the container.
+
+        The value is stripped: secret files are routinely created with a trailing newline
+        (``openssl rand -hex 32 > file`` leaves one), and a signing key or password compared
+        with that newline attached fails with nothing useful in the log.
+        """
+        path = self.secrets_dir / name
+        try:
+            value = path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise RuntimeError(f"secret file {path} is not readable: {exc}") from exc
+        if not value:
+            raise RuntimeError(f"secret file {path} is empty")
+        return value
+
     @property
     def database_path(self) -> Path:
         return self.data_dir / "app.sqlite"

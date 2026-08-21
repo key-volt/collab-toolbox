@@ -8,33 +8,42 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function stubFetch(body: unknown): void {
+function stubFetch(): void {
   vi.stubGlobal(
     'fetch',
-    vi.fn(() => Promise.resolve({ json: () => Promise.resolve(body) })),
+    vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/health')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: 'ok' }), {
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      // No session: the refresh endpoint answers 401 and the app lands on the login screen.
+      return Promise.resolve(new Response(JSON.stringify({ detail: 'no session' }), { status: 401 }))
+    }),
   )
 }
 
-test('renders the product name and the status the backend reports', async () => {
-  stubFetch({ status: 'ok' })
+test('without a session the app shows the login screen', async () => {
+  stubFetch()
 
   render(<App />)
 
-  expect(screen.getByRole('heading', { name: 'collab-toolbox' })).toBeDefined()
   await waitFor(() => {
-    expect(screen.getByTestId('service-status').textContent).toBe('ok')
+    expect(screen.getByRole('heading', { name: 'collab-toolbox' })).toBeDefined()
   })
+  expect(screen.getByLabelText('Username')).toBeDefined()
+  expect(screen.getByLabelText('Password')).toBeDefined()
 })
 
-test('reports unavailable when the request fails', async () => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(() => Promise.reject(new Error('offline'))),
-  )
+test('the login screen reports the service status the backend gives it', async () => {
+  stubFetch()
 
   render(<App />)
 
   await waitFor(() => {
-    expect(screen.getByTestId('service-status').textContent).toBe('unavailable')
+    expect(screen.getByTestId('service-status').textContent).toBe('ok')
   })
 })

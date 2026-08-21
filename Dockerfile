@@ -31,10 +31,16 @@ WORKDIR /app/backend
 COPY backend/pyproject.toml ./
 RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python -r pyproject.toml
 COPY backend/app ./app
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/alembic ./alembic
 
 COPY --from=caddy:2.11.4 /usr/bin/caddy                /usr/bin/caddy
 COPY --from=web          /build/dist                   /app/web
 COPY --from=drawio       /usr/local/tomcat/webapps/draw /app/vendor/drawio
+
+# The editor page is served from /drawio/ so its relative asset paths resolve against
+# the pinned draw.io files beside it; its own bundle loads from the web root.
+COPY --from=web /build/dist/editor.html /app/vendor/drawio/editor.html
 
 COPY deploy/Caddyfile        /etc/caddy/Caddyfile
 COPY deploy/supervisord.conf /etc/supervisord.conf

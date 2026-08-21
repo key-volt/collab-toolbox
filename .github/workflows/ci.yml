@@ -138,15 +138,15 @@ jobs:
           umask 077
           openssl rand -hex 32 > secrets/jwt_secret
           openssl rand -hex 24 > secrets/admin_password
-          grep -vE '^(IMAGE|DOMAIN|ACME_EMAIL|TLS_MODE|HTTP_PORT|HTTPS_PORT|PUID|PGID)=' \
+          grep -vE '^(IMAGE|DOMAIN|ACME_EMAIL|TLS_MODE|PUBLISH_HTTP|PUBLISH_HTTPS|PUID|PGID)=' \
             .env.example > .env
           {
             echo "IMAGE=collab-toolbox:ci"
             echo "DOMAIN=localhost"
             echo "ACME_EMAIL=ci@example.invalid"
             echo "TLS_MODE=off"
-            echo "HTTP_PORT=8080"
-            echo "HTTPS_PORT=8443"
+            echo "PUBLISH_HTTP=127.0.0.1:8080:8080"
+            echo "PUBLISH_HTTPS=127.0.0.1:8443:8443"
             echo "PUID=$(id -u)"
             echo "PGID=$(id -g)"
           } >> .env
@@ -186,7 +186,7 @@ jobs:
         working-directory: e2e
         env:
           E2E_BASE_URL: http://127.0.0.1:8080
-        run: npm run test
+        run: E2E_ADMIN_PASSWORD="$(cat ../deploy/secrets/admin_password)" npm run test
 
       - name: Container logs
         if: failure()
