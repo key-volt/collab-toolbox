@@ -110,14 +110,15 @@ export function AdminUsers() {
         </table>
       </div>
 
-      <AddUserDialog
-        open={adding}
-        onOpenChange={setAdding}
-        onCreated={() => {
-          setAdding(false)
-          reload()
-        }}
-      />
+      {adding && (
+        <AddUserDialog
+          onClose={() => setAdding(false)}
+          onCreated={() => {
+            setAdding(false)
+            reload()
+          }}
+        />
+      )}
       {removing !== null && (
         <Dialog open onOpenChange={(next) => !next && setRemoving(null)} title="Delete user">
           <div className="space-y-4">
@@ -152,26 +153,17 @@ export function AdminUsers() {
 }
 
 function AddUserDialog({
-  open,
-  onOpenChange,
+  onClose,
   onCreated,
 }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  onClose: () => void
   onCreated: () => void
 }) {
+  // Mounted only while open, so every opening starts from a clean slate.
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      setUsername('')
-      setPassword('')
-      setError(null)
-    }
-  }, [open])
 
   const create = () => {
     setBusy(true)
@@ -187,7 +179,7 @@ function AddUserDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Add user">
+    <Dialog open onOpenChange={(next) => !next && onClose()} title="Add user">
       <div className="space-y-4">
         <Field label="Username">
           <TextInput autoFocus value={username} onChange={(e) => setUsername(e.target.value)} />
@@ -201,7 +193,7 @@ function AddUserDialog({
         </Field>
         <ErrorLine message={error} />
         <div className="flex justify-end gap-2">
-          <Button onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={onClose}>Cancel</Button>
           <Button
             variant="primary"
             disabled={busy || username.trim() === '' || password.length < 8}

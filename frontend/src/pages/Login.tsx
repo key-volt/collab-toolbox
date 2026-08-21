@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { Button, ErrorLine, Field, TextInput } from '../components/ui'
@@ -24,7 +24,7 @@ export function Login() {
     }
   }, [])
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: { preventDefault: () => void }) => {
     event.preventDefault()
     setBusy(true)
     setError(null)

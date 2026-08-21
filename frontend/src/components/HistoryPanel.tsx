@@ -14,7 +14,7 @@ function formatStamp(stamp: string): string {
   // 20260821T141530Z → 2026-08-21 14:15
   const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/.exec(stamp)
   if (match === null) return stamp
-  return `${match[1] ?? ''}-${match[2] ?? ''}-${match[3] ?? ''} ${match[4] ?? ''}:${match[5] ?? ''}`
+  return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}`
 }
 
 function formatSize(size: number): string {
@@ -35,9 +35,11 @@ export function HistoryPanel({
 }) {
   const [versions, setVersions] = useState<VersionRow[] | null>(null)
   const [selected, setSelected] = useState<VersionRow | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState<{ name: string; content: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // The preview belongs to the selection it was fetched for; a stale one never shows.
+  const preview = selected !== null && loaded?.name === selected.name ? loaded.content : null
 
   const reload = useCallback(() => {
     api<VersionRow[]>(`/api/documents/${docId}/versions`)
@@ -50,18 +52,13 @@ export function HistoryPanel({
   useEffect(reload, [reload])
 
   useEffect(() => {
-    if (selected === null) {
-      setPreview(null)
-      return
-    }
+    if (selected === null) return
     let active = true
     apiText(`/api/documents/${docId}/versions/${selected.name}`)
       .then((content) => {
-        if (active) setPreview(content)
+        if (active) setLoaded({ name: selected.name, content })
       })
-      .catch(() => {
-        if (active) setPreview(null)
-      })
+      .catch(() => undefined)
     return () => {
       active = false
     }

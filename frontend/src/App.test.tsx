@@ -12,7 +12,8 @@ function stubFetch(): void {
   vi.stubGlobal(
     'fetch',
     vi.fn((input: RequestInfo | URL) => {
-      const url = String(input)
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       if (url.includes('/api/health')) {
         return Promise.resolve(
           new Response(JSON.stringify({ status: 'ok' }), {

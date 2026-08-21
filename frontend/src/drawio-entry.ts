@@ -21,15 +21,13 @@ interface DrawioAppConstructor {
   main(onReady: (ui: DrawioAppUi) => void, createUi: () => unknown): void
 }
 
-interface DrawioEditorConstructor {
-  new (
-    chromeless: boolean,
-    themes: unknown,
-    model: unknown,
-    graph: unknown,
-    editable: boolean,
-  ): unknown
-}
+type DrawioEditorConstructor = new (
+  chromeless: boolean,
+  themes: unknown,
+  model: unknown,
+  graph: unknown,
+  editable: boolean,
+) => unknown
 
 interface DrawioWindow {
   App?: DrawioAppConstructor
@@ -147,16 +145,14 @@ async function boot(): Promise<void> {
           }
           const binding = new Binding(file, {
             doc,
-            awareness: provider.awareness as unknown as Awareness,
+            awareness: provider.awareness,
             undoManager: false,
             consistencyCheckInterval: 30_000,
             onDrift: (event) => {
               console.warn('[editor] document drift detected', event)
             },
           })
-          provider.takeoverUndoManager(
-            binding.file as unknown as Parameters<typeof provider.takeoverUndoManager>[0],
-          )
+          provider.takeoverUndoManager(binding.file)
           const bindingUi = binding.file.getUi()
           bindingUi.editor.setModified(false)
           bindingUi.editor.setStatus('')

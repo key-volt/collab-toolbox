@@ -63,7 +63,7 @@ def initialise_database(database_path: Path) -> None:
 def run_migrations() -> None:
     backend_dir = Path(__file__).resolve().parent.parent
     config = AlembicConfig(str(backend_dir / "alembic.ini"))
-    config.set_main_option("script_location", str(backend_dir / "alembic"))
+    config.set_main_option("script_location", str(backend_dir / "migrations"))
     command.upgrade(config, "head")
 
 

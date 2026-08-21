@@ -2,7 +2,7 @@ import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import type { BinaryFileData, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { generateNKeysBetween } from 'fractional-indexing'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import * as Y from 'yjs'
 
@@ -118,7 +118,7 @@ function buildSnapshotBody(doc: Y.Doc): string {
           content: {
             type: 'excalidraw',
             version: 2,
-            elements: yjsToExcalidraw(elementsOf(page) as never),
+            elements: yjsToExcalidraw(elementsOf(page)),
             appState: {},
             files: {},
             collabUploads,
@@ -160,6 +160,7 @@ export function PaintEditor({ docId }: { docId: string }) {
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [orderIds, setOrderIds] = useState<string[]>([])
+  const [pageTitles, setPageTitles] = useState<Record<string, string>>({})
   const [currentPageId, setCurrentPageId] = useState<string | null>(null)
   const [renamingPage, setRenamingPage] = useState<string | null>(null)
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawImperativeAPI | null>(null)
@@ -177,27 +178,28 @@ export function PaintEditor({ docId }: { docId: string }) {
       .catch(() => undefined)
   }, [docId])
 
-  const assetStore: AssetStore = {
-    store: async (file) => {
-      const form = new FormData()
-      form.append('file', dataUrlToBlob(file.dataURL), file.id)
-      form.append('document_id', docId)
-      const uploaded = await api<{ id: string }>('/api/files', { method: 'POST', body: form })
-      return { id: file.id, mimeType: file.mimeType, uploadId: uploaded.id }
-    },
-    load: async (asset) => {
-      const blob = await apiBlob(`/api/files/${asset.uploadId}`)
-      const dataURL = await blobToDataUrl(blob)
-      return {
-        id: asset.id,
-        mimeType: asset.mimeType,
-        dataURL,
-        created: Date.now(),
-      } as unknown as BinaryFileData
-    },
-  }
-  const assetStoreRef = useRef(assetStore)
-  assetStoreRef.current = assetStore
+  const assetStore = useMemo<AssetStore>(
+    () => ({
+      store: async (file) => {
+        const form = new FormData()
+        form.append('file', dataUrlToBlob(file.dataURL), file.id)
+        form.append('document_id', docId)
+        const uploaded = await api<{ id: string }>('/api/files', { method: 'POST', body: form })
+        return { id: file.id, mimeType: file.mimeType, uploadId: uploaded.id }
+      },
+      load: async (asset) => {
+        const blob = await apiBlob(`/api/files/${asset.uploadId}`)
+        const dataURL = await blobToDataUrl(blob)
+        return {
+          id: asset.id,
+          mimeType: asset.mimeType,
+          dataURL,
+          created: Date.now(),
+        } as unknown as BinaryFileData
+      },
+    }),
+    [docId],
+  )
 
   // The room: connect once per document, seed it when we are the elected first client,
   // keep the order list and the presence roster mirrored into React state.
@@ -219,7 +221,13 @@ export function PaintEditor({ docId }: { docId: string }) {
     const order = orderOf(session.doc)
     const syncOrder = () => {
       const ids = order.toArray()
+      const titles: Record<string, string> = {}
+      for (const id of ids) {
+        const title = pagesMapOf(session.doc).get(id)?.get('title')
+        titles[id] = typeof title === 'string' ? title : 'Page'
+      }
       setOrderIds(ids)
+      setPageTitles(titles)
       setCurrentPageId((current) =>
         current !== null && ids.includes(current) ? current : (ids[0] ?? null),
       )
@@ -242,12 +250,12 @@ export function PaintEditor({ docId }: { docId: string }) {
       const fresh = await api<DocumentDetail>(`/api/documents/${docId}`)
       const contents = await Promise.all(
         fresh.pages.map((page) =>
-          api<never>(`/api/documents/${docId}/files/${page.filename}`).catch(() => null),
+          api<unknown>(`/api/documents/${docId}/files/${page.filename}`).catch(() => null),
         ),
       )
       session.doc.transact(() => {
         fresh.pages.forEach((page, index) => {
-          const raw = contents[index]
+          const raw: unknown = contents[index]
           const content =
             typeof raw === 'object' && raw !== null ? (raw as PageContent) : EMPTY_CONTENT
           pagesMapOf(session.doc).set(page.id, buildPage(page.title, content))
@@ -266,6 +274,7 @@ export function PaintEditor({ docId }: { docId: string }) {
     }
     syncOrder()
 
+    const undoManagers = undoManagersRef.current
     return () => {
       const finalAwareness = session.awareness
       if (finalAwareness !== null && isElected(finalAwareness) && orderOf(session.doc).length > 0) {
@@ -273,7 +282,7 @@ export function PaintEditor({ docId }: { docId: string }) {
       }
       bindingRef.current?.destroy()
       bindingRef.current = null
-      undoManagersRef.current.clear()
+      undoManagers.clear()
       setPeers([])
       session.destroy()
       sessionRef.current = null
@@ -297,12 +306,12 @@ export function PaintEditor({ docId }: { docId: string }) {
     }
     awareness.setLocalStateField('pageId', currentPageId)
     const binding = new ExcalidrawBinding(
-      elementsOf(page) as never,
-      assetsOf(page) as never,
+      elementsOf(page),
+      assetsOf(page),
       excalidrawAPI,
       awareness,
       { excalidrawDom: dom, undoManager },
-      assetStoreRef.current,
+      assetStore,
     )
     bindingRef.current = binding
     // Deterministic handles for the browser test suite; they carry no secrets.
@@ -319,7 +328,7 @@ export function PaintEditor({ docId }: { docId: string }) {
       binding.destroy()
       bindingRef.current = null
     }
-  }, [excalidrawAPI, currentPageId, orderIds.length])
+  }, [excalidrawAPI, currentPageId, orderIds.length, assetStore])
 
   // The elected client persists the document on the autosave cadence.
   useEffect(() => {
@@ -342,7 +351,7 @@ export function PaintEditor({ docId }: { docId: string }) {
       const match = /^page-(\d+)\.excalidraw$/.exec(filename)
       if (match === null) throw new Error('unknown version file')
       const ordinal = Number(match[1])
-      const pageId = orderOf(session.doc).toArray()[ordinal - 1]
+      const pageId = orderOf(session.doc).toArray().at(ordinal - 1)
       if (pageId === undefined) throw new Error('that page no longer exists')
       const page = pagesMapOf(session.doc).get(pageId)
       if (page === undefined) throw new Error('that page no longer exists')
@@ -384,11 +393,6 @@ export function PaintEditor({ docId }: { docId: string }) {
     undoManagersRef.current.delete(pageId)
   }
 
-  const pageTitle = (pageId: string): string => {
-    const page = sessionRef.current === null ? undefined : pagesMapOf(sessionRef.current.doc).get(pageId)
-    return (page?.get('title') as string | undefined) ?? 'Page'
-  }
-
   if (denied) {
     return (
       <div className="text-muted flex h-full flex-col items-center justify-center gap-3 text-sm">
@@ -405,7 +409,7 @@ export function PaintEditor({ docId }: { docId: string }) {
           <Link to="/t/paint" className="text-muted hover:text-text text-sm">
             ←
           </Link>
-          {detail !== null && <TitleEditor docId={docId} title={detail.title} />}
+          {detail !== null && <TitleEditor key={detail.title} docId={docId} title={detail.title} />}
           <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
             {orderIds.map((pageId) => (
               <span key={pageId} className="flex items-center">
@@ -419,7 +423,7 @@ export function PaintEditor({ docId }: { docId: string }) {
                       : 'text-muted hover:text-text'
                   }`}
                 >
-                  {pageTitle(pageId)}
+                  {pageTitles[pageId]}
                 </button>
                 {user?.is_admin === true && orderIds.length > 1 && currentPageId === pageId && (
                   <button
@@ -464,7 +468,7 @@ export function PaintEditor({ docId }: { docId: string }) {
       )}
       {renamingPage !== null && (
         <RenamePageDialog
-          initial={pageTitle(renamingPage)}
+          initial={pageTitles[renamingPage]}
           onClose={() => setRenamingPage(null)}
           onRename={(next) => {
             const session = sessionRef.current

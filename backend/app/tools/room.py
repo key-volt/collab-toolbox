@@ -9,6 +9,7 @@ Sec-WebSocket-Protocol header, never a query string, and authorization is read f
 database at connect time rather than trusted from the token.
 """
 
+import contextlib
 import logging
 
 from fastapi import WebSocket
@@ -89,11 +90,9 @@ class RoomHub:
 
     async def kick_user(self, user_id: str) -> None:
         for websocket in list(self._sockets.get(user_id, ())):
-            try:
+            # A socket already closing raises; its registry entry goes away with its handler.
+            with contextlib.suppress(RuntimeError):
                 await websocket.close(code=CLOSE_FORBIDDEN)
-            except RuntimeError:
-                # Already closing; the registry entry goes away with its handler.
-                pass
 
 
 def _bearer_token(header: str) -> tuple[bool, str | None]:

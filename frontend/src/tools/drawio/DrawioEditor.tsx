@@ -154,7 +154,7 @@ export function DrawioEditor({ docId }: { docId: string }) {
           <Link to="/t/drawio" className="text-muted hover:text-text text-sm">
             ←
           </Link>
-          {detail !== null && <TitleEditor docId={docId} title={detail.title} />}
+          {detail !== null && <TitleEditor key={detail.title} docId={docId} title={detail.title} />}
           <div className="ml-auto flex items-center gap-3">
             <SaveState connected={connected} lastSavedAt={savedAt} />
             <Button onClick={() => setHistoryOpen((open) => !open)}>History</Button>

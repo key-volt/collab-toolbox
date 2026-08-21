@@ -19,6 +19,11 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    rules: {
+      // `onClick={() => setThing(x)}` is idiomatic React; flagging every void-returning
+      // arrow shorthand buries real findings under style noise.
+      '@typescript-eslint/no-confusing-void-expression': ['error', { ignoreArrowShorthand: true }],
+    },
   },
   {
     files: ['**/*.js'],

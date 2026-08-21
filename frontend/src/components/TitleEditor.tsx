@@ -1,14 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import { api } from '../lib/api'
 
-// The document title, editable in place from the editor chrome.
+// The document title, editable in place from the editor chrome. Mount it with
+// key={title} so a fresh title from the server resets the local draft.
 export function TitleEditor({ docId, title }: { docId: string; title: string }) {
   const [value, setValue] = useState(title)
-
-  useEffect(() => {
-    setValue(title)
-  }, [title])
 
   const commit = () => {
     const trimmed = value.trim()

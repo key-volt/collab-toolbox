@@ -81,14 +81,15 @@ export function Documents() {
         ))}
       </div>
 
-      <CreateDialog
-        open={creating}
-        onOpenChange={setCreating}
-        initialTool={toolFilter}
-        onCreated={(row) => {
-          void navigate(`/t/${row.tool}/${row.id}`)
-        }}
-      />
+      {creating && (
+        <CreateDialog
+          initialTool={toolFilter}
+          onClose={() => setCreating(false)}
+          onCreated={(row) => {
+            void navigate(`/t/${row.tool}/${row.id}`)
+          }}
+        />
+      )}
       {deleting !== null && (
         <DeleteDialog
           row={deleting}
@@ -104,28 +105,19 @@ export function Documents() {
 }
 
 function CreateDialog({
-  open,
-  onOpenChange,
   initialTool,
+  onClose,
   onCreated,
 }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
   initialTool: string | undefined
+  onClose: () => void
   onCreated: (row: { id: string; tool: string }) => void
 }) {
+  // Mounted only while open, so every opening starts from a clean slate.
   const [title, setTitle] = useState('')
-  const [tool, setTool] = useState(initialTool ?? TOOLS[0]?.slug ?? 'drawio')
+  const [tool, setTool] = useState(initialTool ?? TOOLS[0].slug)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      setTitle('')
-      setTool(initialTool ?? TOOLS[0]?.slug ?? 'drawio')
-      setError(null)
-    }
-  }, [open, initialTool])
 
   const create = () => {
     setBusy(true)
@@ -135,7 +127,6 @@ function CreateDialog({
       json: { tool, title },
     })
       .then((row) => {
-        onOpenChange(false)
         onCreated(row)
       })
       .catch((cause: unknown) => {
@@ -147,7 +138,7 @@ function CreateDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="New document">
+    <Dialog open onOpenChange={(next) => !next && onClose()} title="New document">
       <div className="space-y-4">
         <Field label="Title">
           <TextInput
@@ -171,7 +162,7 @@ function CreateDialog({
         </Field>
         <ErrorLine message={error} />
         <div className="flex justify-end gap-2">
-          <Button onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabled={busy || title.trim() === ''} onClick={create}>
             {busy ? 'Creating…' : 'Create'}
           </Button>

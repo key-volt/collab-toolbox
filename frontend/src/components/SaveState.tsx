@@ -9,12 +9,14 @@ export function SaveState({
   connected: boolean
   lastSavedAt: number | null
 }) {
-  const [, forceTick] = useState(0)
+  // The clock lives in state so render stays pure; the first paint after a save shows
+  // "0s ago" until the next tick catches up.
+  const [now, setNow] = useState(0)
 
   useEffect(() => {
     const timer = setInterval(() => {
-      forceTick((value) => value + 1)
-    }, 5000)
+      setNow(Date.now())
+    }, 1000)
     return () => clearInterval(timer)
   }, [])
 
@@ -32,7 +34,7 @@ export function SaveState({
       </span>
     )
   }
-  const seconds = Math.max(0, Math.round((Date.now() - lastSavedAt) / 1000))
+  const seconds = Math.max(0, Math.round((now - lastSavedAt) / 1000))
   return (
     <span className="text-muted text-xs" data-testid="save-state">
       saved {String(seconds)}s ago
