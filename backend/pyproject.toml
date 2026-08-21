@@ -54,6 +54,10 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "S105", "S106"] # tests assert and carry throwaway passwords
 
+[tool.ruff.lint.isort]
+# The import classification must not depend on what happens to sit in the working tree.
+known-third-party = ["alembic"]
+
 [tool.mypy]
 python_version = "3.12"
 files = ["app", "tests"]

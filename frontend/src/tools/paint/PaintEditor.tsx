@@ -86,7 +86,7 @@ function parsePageContent(raw: string): PageContent {
   try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed === 'object' && parsed !== null) {
-      return parsed as PageContent
+      return parsed
     }
   } catch {
     // fall through to an empty page

@@ -4,7 +4,6 @@
 // nothing else: no network, no tokens — the parent owns the connection.
 
 import * as Y from 'yjs'
-import type { Awareness } from 'y-protocols/awareness'
 
 import { Binding, ydoc2xml } from './vendor/y-mxgraph'
 import { createIframeBridgeProvider } from './vendor/y-mxgraph/iframe-bridge'
