@@ -93,7 +93,7 @@ async def list_documents(
     counts_result = await session.execute(
         select(Page.document_id, func.count()).group_by(Page.document_id)
     )
-    counts = dict(counts_result.all())
+    counts = dict(counts_result.tuples().all())
 
     rows = []
     for document in documents:
@@ -239,7 +239,7 @@ async def read_document_file(
     result = await session.execute(
         select(Page.filename).where(Page.document_id == doc_id).distinct()
     )
-    known = {row for (row,) in result.all()}
+    known = set(result.scalars().all())
     if filename not in known:
         raise HTTPException(status_code=404, detail="no such file")
     try:
