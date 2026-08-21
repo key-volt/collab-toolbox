@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Local configuration
+.env
+.env.*
+!.env.example
+secrets/
+
+# Runtime state
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Test output
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

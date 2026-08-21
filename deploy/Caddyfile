@@ -1,0 +1,55 @@
+{
+	admin off
+	email {$ACME_EMAIL:noreply@localhost}
+
+	# The host publishes 80 and 443 onto these, so nothing inside needs a privileged port.
+	http_port 8080
+	https_port 8443
+
+	# Certificates live on the mounted volume; otherwise every container replacement
+	# re-issues them and burns the issuance quota.
+	storage file_system {
+		root /data/caddy/data
+	}
+}
+
+{$SITE_ADDRESS} {
+	log {
+		output stdout
+		format console
+	}
+
+	encode zstd gzip
+
+	@https expression `{http.request.scheme} == "https"`
+	header @https Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+	header {
+		# frame-ancestors is the control that stops another site embedding the editor and
+		# reading its bridge traffic as the parent window. frame-src is the mirror of it.
+		# Set only if the application did not already send its own policy.
+		?Content-Security-Policy "frame-ancestors 'self'; frame-src 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	handle /ws/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	handle_path /drawio/* {
+		root * /app/vendor/drawio
+		file_server
+	}
+
+	handle {
+		root * /app/web
+		try_files {path} /index.html
+		file_server
+	}
+}

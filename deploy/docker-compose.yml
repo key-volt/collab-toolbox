@@ -1,0 +1,21 @@
+name: collab-toolbox
+
+services:
+  app:
+    image: ${IMAGE}
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+      - "${HTTPS_PORT:-443}:8443"
+    env_file: [.env]
+    volumes:
+      - ./data:/data
+    secrets:
+      - admin_password
+      - jwt_secret
+
+secrets:
+  admin_password:
+    file: ./secrets/admin_password
+  jwt_secret:
+    file: ./secrets/jwt_secret
