@@ -164,7 +164,7 @@ export function DrawioEditor({ docId }: { docId: string }) {
           ref={iframeRef}
           title="Diagram editor"
           src="/drawio/editor.html"
-          sandbox="allow-scripts allow-same-origin allow-downloads allow-popups"
+          sandbox="allow-scripts allow-same-origin allow-downloads allow-popups allow-modals"
           className="min-h-0 w-full flex-1 border-0 bg-[#0b0b0d]"
         />
       </div>

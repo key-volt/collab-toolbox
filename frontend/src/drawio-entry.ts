@@ -45,7 +45,40 @@ interface DrawioWindow {
 
 const drawioWindow = window as unknown as DrawioWindow
 
+// draw.io's own index.html defines a global script-loader helper that app.min.js calls
+// mid-boot to pull in its extra bundles (shapes, stencils, extensions). Serving the
+// editor from our own page means providing it ourselves; relative paths resolve against
+// the pinned assets beside this page.
+type ScriptLoader = (
+  src: string,
+  onLoad?: () => void,
+  id?: string,
+  dataAppKey?: string,
+  noWrite?: boolean,
+  onError?: (message: string, error: unknown) => void,
+) => void
+
+function installScriptLoader(): void {
+  const loader: ScriptLoader = (src, onLoad, id, _dataAppKey, _noWrite, onError) => {
+    const resolved =
+      src.startsWith('http') || src.startsWith('/') ? src : `${DRAWIO_BASE}${src}`
+    const script = document.createElement('script')
+    script.type = 'text/javascript'
+    script.src = resolved
+    if (id !== undefined) script.id = id
+    if (onLoad !== undefined) {
+      script.onload = () => onLoad()
+    }
+    if (onError !== undefined) {
+      script.onerror = () => onError(`failed to load ${resolved}`, undefined)
+    }
+    document.head.appendChild(script)
+  }
+  ;(window as unknown as { mxscript?: ScriptLoader }).mxscript = loader
+}
+
 function configure(): void {
+  installScriptLoader()
   // Everything here must be set before app.min.js runs. mxIsElectron off keeps draw.io
   // away from Node APIs; mxLoadStylesheets off stops it injecting CSS via
   // document.write — the two stylesheets are linked below instead.
