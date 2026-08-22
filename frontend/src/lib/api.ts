@@ -170,6 +170,33 @@ export async function login(username: string, password: string): Promise<Session
   return adoptSession((await response.json()) as SessionPayload)
 }
 
+export async function register(
+  username: string,
+  password: string,
+  altcha: string,
+): Promise<Session> {
+  const response = await fetch('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, altcha }),
+  })
+  if (!response.ok) {
+    throw new ApiError(response.status, await errorMessage(response))
+  }
+  return adoptSession((await response.json()) as SessionPayload)
+}
+
+// The registration feature probe: the challenge endpoint answers 403 when the feature
+// is off, and challenges are stateless, so asking costs nothing to keep.
+export async function registrationOpen(): Promise<boolean> {
+  try {
+    const response = await fetch('/api/auth/register/challenge')
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
 export async function logout(): Promise<void> {
   try {
     await fetch('/api/auth/logout', { method: 'POST' })

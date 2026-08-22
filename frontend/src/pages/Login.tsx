@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 
 import { Button, ErrorLine, Field, TextInput } from '../components/ui'
+import { registrationOpen } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { readServiceStatus, type ServiceStatus } from '../lib/health'
 
@@ -13,11 +14,15 @@ export function Login() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<ServiceStatus>('checking')
+  const [canRegister, setCanRegister] = useState(false)
 
   useEffect(() => {
     let active = true
     void readServiceStatus().then((next) => {
       if (active) setStatus(next)
+    })
+    void registrationOpen().then((open) => {
+      if (active) setCanRegister(open)
     })
     return () => {
       active = false
@@ -75,6 +80,14 @@ export function Login() {
           {busy ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>
+      {canRegister && (
+        <p className="text-muted text-sm">
+          No account yet?{' '}
+          <Link to="/register" className="text-text underline-offset-4 hover:underline">
+            Register
+          </Link>
+        </p>
+      )}
       <p className="text-muted text-sm">
         service <span data-testid="service-status">{status}</span>
       </p>

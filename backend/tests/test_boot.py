@@ -1,6 +1,8 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from app import boot
 from app.auth.passwords import verify_password
 from tests.conftest import ADMIN_PASSWORD
@@ -58,6 +60,18 @@ def test_boot_refuses_without_the_admin_secret(data_dir: Path) -> None:
     from app.config import get_settings
 
     (get_settings().secrets_dir / "admin_password").unlink()
+
+    assert boot.main() == 1
+
+
+def test_boot_refuses_a_snapshot_ceiling_above_the_upload_ceiling(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setenv("CODE_MAX_PROJECT_MB", "30")
+    monkeypatch.setenv("UPLOAD_MAX_MB", "25")
+    get_settings.cache_clear()
 
     assert boot.main() == 1
 

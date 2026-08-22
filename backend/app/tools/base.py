@@ -26,11 +26,18 @@ class PageSpec:
 class Snapshot:
     files: dict[str, bytes]
     pages: list[PageSpec]
+    # Folders that exist even though no file lives in them yet. Only meaningful for
+    # tools whose documents are directory trees.
+    folders: tuple[str, ...] = ()
 
 
 class Tool(Protocol):
     slug: str
     title: str
+    # True when the document is a directory tree the snapshot describes completely:
+    # after writing, files on disk that the snapshot no longer names are deleted and
+    # empty folders it names are created. Flat-file tools leave this off.
+    sync_tree: bool
 
     def initial_files(self) -> dict[str, bytes]:
         """The files a new document starts from."""

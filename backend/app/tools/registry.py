@@ -5,10 +5,11 @@ this list, and a test asserts the two agree.
 """
 
 from app.tools.base import Tool
+from app.tools.code.store import CodeTool
 from app.tools.drawio.store import DrawioTool
 from app.tools.paint.store import PaintTool
 
-TOOLS: tuple[Tool, ...] = (DrawioTool(), PaintTool())
+TOOLS: tuple[Tool, ...] = (DrawioTool(), PaintTool(), CodeTool())
 
 
 def get_tool(slug: str) -> Tool | None:

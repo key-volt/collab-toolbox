@@ -19,7 +19,17 @@ export function AdminUsers() {
 
   const reload = useCallback(() => {
     api<UserRow[]>('/api/admin/users')
-      .then(setRows)
+      .then((loaded) => {
+        // Pending accounts first: with no notification system, this list is how new
+        // self-registrations get seen.
+        setRows(
+          [...loaded].sort((a, b) => {
+            const aApproved = a.is_whitelisted || a.is_admin ? 1 : 0
+            const bApproved = b.is_whitelisted || b.is_admin ? 1 : 0
+            return aApproved - bApproved || a.username.localeCompare(b.username)
+          }),
+        )
+      })
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : 'could not load users')
       })
@@ -64,6 +74,9 @@ export function AdminUsers() {
                 <td className="px-4 py-2">
                   {row.username}
                   {row.is_admin && <span className="text-muted ml-2 text-xs">administrator</span>}
+                  {!row.is_admin && !row.is_whitelisted && (
+                    <span className="text-accent ml-2 text-xs">pending</span>
+                  )}
                 </td>
                 <td className="px-4 py-2">
                   {row.is_admin ? (

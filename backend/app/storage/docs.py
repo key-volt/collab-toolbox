@@ -27,7 +27,26 @@ def create_document_dir(settings: Settings, dir_name: str, files: dict[str, byte
     directory = document_dir(settings, dir_name)
     directory.mkdir(parents=True)
     for filename, content in files.items():
-        (directory / filename).write_bytes(content)
+        target = directory / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+
+
+def _walk_files(directory: Path) -> list[Path]:
+    """Every regular file under the directory, skipping dot-named entries at any level.
+
+    Dot names are reserved for internals (.versions, scratch files); document trees
+    cannot contain them, so skipping them here never hides user content.
+    """
+    found: list[Path] = []
+    for entry in directory.iterdir():
+        if entry.name.startswith("."):
+            continue
+        if entry.is_dir():
+            found.extend(_walk_files(entry))
+        elif entry.is_file():
+            found.append(entry)
+    return found
 
 
 def modified_at(settings: Settings, dir_name: str) -> str | None:
@@ -36,15 +55,50 @@ def modified_at(settings: Settings, dir_name: str) -> str | None:
     newest: float | None = None
     if not directory.is_dir():
         return None
-    for entry in directory.iterdir():
-        if entry.name.startswith(".") or not entry.is_file():
-            continue
+    for entry in _walk_files(directory):
         stamp = entry.stat().st_mtime
         if newest is None or stamp > newest:
             newest = stamp
     if newest is None:
         return None
     return datetime.fromtimestamp(newest, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def sync_tree(
+    settings: Settings, dir_name: str, keep_files: set[str], folders: set[str]
+) -> None:
+    """Make the directory tree match a complete snapshot manifest.
+
+    Files the manifest no longer names are deleted (their version history stays),
+    deliberately empty folders are created, and directories left with nothing in them
+    are pruned. Dot-named entries are internals and are never touched.
+    """
+    directory = document_dir(settings, dir_name)
+    if not directory.is_dir():
+        return
+    for entry in _walk_files(directory):
+        relative = entry.relative_to(directory).as_posix()
+        if relative not in keep_files:
+            entry.unlink(missing_ok=True)
+    for folder in folders:
+        (directory / folder).mkdir(parents=True, exist_ok=True)
+    keep_dirs = {str(part) for folder in folders for part in _prefixes(folder)}
+    _prune_empty_dirs(directory, directory, keep_dirs)
+
+
+def _prefixes(folder: str) -> list[str]:
+    parts = folder.split("/")
+    return ["/".join(parts[: index + 1]) for index in range(len(parts))]
+
+
+def _prune_empty_dirs(root: Path, directory: Path, keep_dirs: set[str]) -> None:
+    for entry in directory.iterdir():
+        if entry.name.startswith(".") or not entry.is_dir():
+            continue
+        _prune_empty_dirs(root, entry, keep_dirs)
+        relative = entry.relative_to(root).as_posix()
+        if relative not in keep_dirs and not any(entry.iterdir()):
+            entry.rmdir()
 
 
 def read_document_file(settings: Settings, dir_name: str, filename: str) -> bytes:

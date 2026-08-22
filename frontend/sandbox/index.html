@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Code sandbox</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #0b0b0d;
+        color: #e7e7ea;
+        font: 13px ui-sans-serif, system-ui, sans-serif;
+      }
+      #layout {
+        display: flex;
+        height: 100%;
+      }
+      #terminal {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 4px 0 0 6px;
+      }
+      #graphics {
+        display: none;
+        flex: 0 0 40%;
+        min-width: 0;
+        overflow: auto;
+        border-left: 1px solid #26262e;
+        background: #141418;
+        padding: 8px;
+      }
+      #graphics.has-content {
+        display: block;
+      }
+      #graphics img,
+      #graphics svg {
+        max-width: 100%;
+        display: block;
+        margin: 0 auto 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="layout">
+      <div id="terminal"></div>
+      <div id="graphics"></div>
+    </div>
+    <script type="module" src="./src/controller.ts"></script>
+  </body>
+</html>

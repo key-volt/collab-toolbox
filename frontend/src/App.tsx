@@ -12,6 +12,7 @@ import { AdminUsers } from './pages/AdminUsers'
 import { Documents } from './pages/Documents'
 import { Login } from './pages/Login'
 import { Pending } from './pages/Pending'
+import { Register } from './pages/Register'
 import { TOOLS } from './tools'
 
 const PaintEditor = lazy(() =>
@@ -19,6 +20,9 @@ const PaintEditor = lazy(() =>
 )
 const DrawioEditor = lazy(() =>
   import('./tools/drawio/DrawioEditor').then((module) => ({ default: module.DrawioEditor })),
+)
+const CodeEditor = lazy(() =>
+  import('./tools/code/CodeEditor').then((module) => ({ default: module.CodeEditor })),
 )
 
 interface PresenceContextValue {
@@ -40,6 +44,7 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
           <Route element={<RequireSession />}>
             <Route path="/pending" element={<Pending />} />
             <Route element={<Shell />}>
@@ -275,6 +280,13 @@ function EditorRoute() {
     return (
       <Suspense fallback={fallback}>
         <DrawioEditor docId={docId} />
+      </Suspense>
+    )
+  }
+  if (tool === 'code') {
+    return (
+      <Suspense fallback={fallback}>
+        <CodeEditor docId={docId} />
       </Suspense>
     )
   }

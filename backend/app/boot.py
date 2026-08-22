@@ -69,6 +69,16 @@ def run_migrations() -> None:
 
 def main() -> int:
     settings = get_settings()
+    if settings.code_max_project_mb > settings.upload_max_mb:
+        # The whole-project snapshot must fit through the one inbound size ceiling; a
+        # configuration that can never save should fail here, not at the first save.
+        print(
+            "boot: CODE_MAX_PROJECT_MB "
+            f"({settings.code_max_project_mb}) exceeds UPLOAD_MAX_MB "
+            f"({settings.upload_max_mb}), refusing to serve",
+            file=sys.stderr,
+        )
+        return 1
     ensure_layout(settings)
     copy = backup_database(settings.database_path, settings.backups_dir)
     if copy is not None:

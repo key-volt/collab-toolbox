@@ -4,6 +4,11 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  worker: {
+    // The lint worker code-splits its engines (they load per language), which needs
+    // module workers rather than the single-file default.
+    format: 'es',
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,

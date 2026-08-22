@@ -79,9 +79,9 @@ jobs:
       # surfacing later as a crash.
       - name: Verify the environment
         run: >
-          .venv/bin/python -c "import aiosqlite, alembic, argon2, defusedxml, fastapi,
-          jwt, pycrdt, pycrdt.websocket, pydantic_settings, python_multipart, sqlalchemy,
-          uvicorn"
+          .venv/bin/python -c "import aiosqlite, alembic, altcha, argon2, defusedxml,
+          fastapi, jwt, pycrdt, pycrdt.websocket, pydantic_settings, python_multipart,
+          sqlalchemy, uvicorn"
 
       - name: Lint
         run: |
@@ -147,15 +147,15 @@ jobs:
           umask 077
           openssl rand -hex 32 > secrets/jwt_secret
           openssl rand -hex 24 > secrets/admin_password
-          grep -vE '^(IMAGE|DOMAIN|ACME_EMAIL|TLS_MODE|PUBLISH_HTTP|PUBLISH_HTTPS|PUID|PGID)=' \
+          grep -vE '^(IMAGE|DOMAIN|ACME_EMAIL|TLS_MODE|BIND_ADDR|HTTP_PORT|PUID|PGID)=' \
             .env.example > .env
           {
             echo "IMAGE=collab-toolbox:ci"
             echo "DOMAIN=localhost"
             echo "ACME_EMAIL=ci@example.invalid"
             echo "TLS_MODE=off"
-            echo "PUBLISH_HTTP=127.0.0.1:8080:8080"
-            echo "PUBLISH_HTTPS=127.0.0.1:8443:8443"
+            echo "BIND_ADDR=127.0.0.1"
+            echo "HTTP_PORT=8080"
             echo "PUID=$(id -u)"
             echo "PGID=$(id -g)"
           } >> .env

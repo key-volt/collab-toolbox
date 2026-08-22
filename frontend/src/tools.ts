@@ -10,6 +10,7 @@ export interface ToolInfo {
 export const TOOLS: ToolInfo[] = [
   { slug: 'drawio', title: 'Diagrams', glyph: '◇' },
   { slug: 'paint', title: 'Paint', glyph: '◈' },
+  { slug: 'code', title: 'Code', glyph: '⌗' },
 ]
 
 export function toolInfo(slug: string): ToolInfo | undefined {

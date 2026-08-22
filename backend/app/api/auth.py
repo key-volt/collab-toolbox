@@ -1,19 +1,22 @@
-"""Login, session refresh, logout and self-service password change.
+"""Login, self-registration, session refresh, logout and password change.
 
 The access token lives in the client's memory only. The refresh token is an httpOnly
 cookie scoped under /api/auth, so scripts can never read it and it only ever travels to
-these endpoints. Login is the sole unauthenticated route in the application.
+these endpoints. The unauthenticated surface is login plus the registration pair; a
+freshly registered account is signed in but sees nothing until it is approved.
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.auth.deps import CurrentUser, SessionDep
 from app.auth.passwords import hash_password, verify_password
 from app.auth.ratelimit import SlidingWindowLimiter
+from app.auth.registration import new_challenge, payload_is_valid, username_error
 from app.auth.tokens import (
     hash_refresh_token,
     issue_access_token,
@@ -44,6 +47,15 @@ class PasswordChangeRequest(BaseModel):
 
     current_password: str = Field(min_length=1, max_length=1000)
     new_password: str = Field(min_length=8, max_length=1000)
+
+
+class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=8, max_length=128)
+    # The solved proof-of-work payload the captcha widget produced.
+    altcha: str = Field(min_length=1, max_length=4096)
 
 
 class SessionUser(BaseModel):
@@ -107,6 +119,24 @@ def _expiry(seconds: int) -> str:
     return (datetime.now(UTC) + timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+async def _open_session(
+    user: User, request: Request, response: Response, session: SessionDep
+) -> SessionResponse:
+    """Persist a refresh token, set its cookie, and answer with a fresh access token."""
+    settings = get_settings()
+    refresh_token = new_refresh_token()
+    session.add(
+        RefreshToken(
+            user_id=user.id,
+            token_hash=hash_refresh_token(refresh_token),
+            expires_at=_expiry(settings.refresh_ttl),
+        )
+    )
+    await session.commit()
+    _set_refresh_cookie(response, request, refresh_token, settings.refresh_ttl)
+    return _session_response(user, request.app.state.jwt_secret, settings.access_ttl)
+
+
 @router.post("/login")
 async def login(
     body: LoginRequest, request: Request, response: Response, session: SessionDep
@@ -125,18 +155,66 @@ async def login(
     if not verify_password(user.password_hash, body.password):
         raise HTTPException(status_code=401, detail="wrong username or password")
 
+    return await _open_session(user, request, response, session)
+
+
+@router.get("/register/challenge")
+async def registration_challenge(request: Request) -> dict[str, Any]:
+    """A proof-of-work challenge for the registration form.
+
+    Also the feature probe: the login screen shows its registration link only when this
+    answers 200. Challenges are stateless and HMAC-signed with a per-boot key, so
+    issuing one costs nothing to keep.
+    """
+    if not get_settings().registration_enabled:
+        raise HTTPException(status_code=403, detail="registration is disabled")
+    return new_challenge(request.app.state.registration_hmac_key)
+
+
+@router.post("/register", status_code=201)
+async def register(
+    body: RegisterRequest, request: Request, response: Response, session: SessionDep
+) -> SessionResponse:
     settings = get_settings()
-    refresh_token = new_refresh_token()
-    session.add(
-        RefreshToken(
-            user_id=user.id,
-            token_hash=hash_refresh_token(refresh_token),
-            expires_at=_expiry(settings.refresh_ttl),
-        )
+    if not settings.registration_enabled:
+        raise HTTPException(status_code=403, detail="registration is disabled")
+
+    by_ip: SlidingWindowLimiter = request.app.state.registration_limiter_by_ip
+    overall: SlidingWindowLimiter = request.app.state.registration_limiter_global
+    client_ip = request.client.host if request.client else "unknown"
+    if not by_ip.allow(client_ip) or not overall.allow("registrations"):
+        raise HTTPException(status_code=429, detail="too many registrations, try again later")
+
+    # The captcha gates everything that touches the database, so probing usernames or
+    # filling the pending list costs real work per attempt.
+    if not payload_is_valid(body.altcha, request.app.state.registration_hmac_key):
+        raise HTTPException(status_code=422, detail="the captcha check failed — reload and retry")
+    if not request.app.state.registration_solved.consume(body.altcha):
+        raise HTTPException(status_code=422, detail="that captcha response was already used")
+
+    problem = username_error(body.username, settings.admin_username)
+    if problem is not None:
+        raise HTTPException(status_code=422, detail=problem)
+
+    pending_count = await session.scalar(
+        select(func.count())
+        .select_from(User)
+        .where(User.is_whitelisted.is_(False), User.is_admin.is_(False))
     )
+    if int(pending_count or 0) >= settings.registration_pending_max:
+        raise HTTPException(
+            status_code=429,
+            detail="registration is temporarily full — try again after accounts are approved",
+        )
+
+    existing = await session.execute(select(User).where(User.username == body.username))
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=409, detail="that username is taken")
+
+    user = User(username=body.username, password_hash=hash_password(body.password))
+    session.add(user)
     await session.commit()
-    _set_refresh_cookie(response, request, refresh_token, settings.refresh_ttl)
-    return _session_response(user, request.app.state.jwt_secret, settings.access_ttl)
+    return await _open_session(user, request, response, session)
 
 
 @router.post("/refresh")

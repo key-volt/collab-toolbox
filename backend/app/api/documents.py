@@ -233,10 +233,12 @@ async def delete_document(doc_id: str, _admin: AdminUser, session: SessionDep) -
     return Response(status_code=204)
 
 
-@router.get("/{doc_id}/files/{filename}")
+@router.get("/{doc_id}/files/{filename:path}")
 async def read_document_file(
     doc_id: str, filename: str, _user: WhitelistedUser, session: SessionDep
 ) -> Response:
+    # The path converter lets code files live in subfolders. Traversal is impossible:
+    # the name must exactly match a pages row, and those come from validated snapshots.
     document = await _get_document(session, doc_id)
     result = await session.execute(
         select(Page.filename).where(Page.document_id == doc_id).distinct()

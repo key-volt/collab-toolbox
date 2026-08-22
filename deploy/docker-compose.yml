@@ -3,10 +3,16 @@ name: collab-toolbox
 services:
   app:
     image: ${IMAGE}
+    container_name: collab_tools
     restart: unless-stopped
     ports:
-      - "${PUBLISH_HTTP:-0.0.0.0:80:8080}"
-      - "${PUBLISH_HTTPS:-0.0.0.0:443:8443}"
+      # Host side comes from .env; the container side is fixed. Loopback by default, so
+      # nothing is reachable from outside this machine until .env opens it up.
+      - "${BIND_ADDR:-127.0.0.1}:${HTTP_PORT:-8080}:8080"
+      # HTTPS, only when this container terminates TLS itself (TLS_MODE=acme): uncomment
+      # and set BIND_ADDR=0.0.0.0, HTTP_PORT=80, HTTPS_PORT=443. Behind a proxy that
+      # terminates TLS, nothing listens on 8443 and this line stays commented.
+      # - "${BIND_ADDR:-127.0.0.1}:${HTTPS_PORT:-8443}:8443"
     env_file: [.env]
     volumes:
       - ./data:/data

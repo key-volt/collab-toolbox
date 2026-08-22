@@ -18,6 +18,7 @@ dependencies = [
     "pycrdt==0.14.3",
     "pycrdt-websocket==0.16.4",
     "defusedxml==0.7.1",
+    "altcha==2.1.0",
 ]
 
 [project.optional-dependencies]

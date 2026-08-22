@@ -17,6 +17,19 @@ VERSIONS_DIR = ".versions"
 _VERSION_NAME = re.compile(r"^(?P<stamp>\d{8}T\d{6}Z)-(?P<filename>[^/\\]+)$")
 
 
+def encode_filename(filename: str) -> str:
+    """A document filename as it appears inside a version entry's name.
+
+    Files can live in subfolders, but every version entry is one flat name. '/' becomes
+    '~', which the path rules keep out of real names, so the mapping cannot collide.
+    """
+    return filename.replace("/", "~")
+
+
+def decode_filename(encoded: str) -> str:
+    return encoded.replace("~", "/")
+
+
 @dataclass(frozen=True)
 class VersionInfo:
     name: str
@@ -37,10 +50,11 @@ def _versions_of(versions_dir: Path, filename: str) -> list[Path]:
     """Versions of one file, newest first. Timestamps sort lexicographically."""
     if not versions_dir.is_dir():
         return []
+    encoded = encode_filename(filename)
     matches = []
     for entry in versions_dir.iterdir():
         parsed = _VERSION_NAME.match(entry.name)
-        if parsed is not None and parsed.group("filename") == filename:
+        if parsed is not None and parsed.group("filename") == encoded:
             matches.append(entry)
     return sorted(matches, key=lambda path: path.name, reverse=True)
 
@@ -48,7 +62,8 @@ def _versions_of(versions_dir: Path, filename: str) -> list[Path]:
 def write_snapshot(doc_dir: Path, filename: str, content: bytes, keep: int, days: int) -> bool:
     """Write the current file, and a version entry when the content actually changed."""
     current = doc_dir / filename
-    scratch = doc_dir / f".{filename}.tmp"
+    current.parent.mkdir(parents=True, exist_ok=True)
+    scratch = current.parent / f".{current.name}.tmp"
     scratch.write_bytes(content)
     os.replace(scratch, current)
 
@@ -57,7 +72,7 @@ def write_snapshot(doc_dir: Path, filename: str, content: bytes, keep: int, days
     if existing and _digest(existing[0].read_bytes()) == _digest(content):
         return False
     versions_dir.mkdir(exist_ok=True)
-    (versions_dir / f"{_timestamp()}-{filename}").write_bytes(content)
+    (versions_dir / f"{_timestamp()}-{encode_filename(filename)}").write_bytes(content)
     prune_versions(doc_dir, keep, days)
     return True
 
@@ -74,7 +89,7 @@ def list_versions(doc_dir: Path) -> list[VersionInfo]:
         found.append(
             VersionInfo(
                 name=entry.name,
-                filename=parsed.group("filename"),
+                filename=decode_filename(parsed.group("filename")),
                 stamp=parsed.group("stamp"),
                 size=entry.stat().st_size,
             )

@@ -53,6 +53,9 @@ async def run_pass(app: FastAPI, settings: Settings) -> None:
         await session.commit()
     app.state.login_limiter_by_username.sweep()
     app.state.login_limiter_by_ip.sweep()
+    app.state.registration_limiter_by_ip.sweep()
+    app.state.registration_limiter_global.sweep()
+    app.state.registration_solved.sweep()
 
 
 async def maintenance_loop(app: FastAPI) -> None:

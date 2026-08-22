@@ -83,6 +83,14 @@ async def push_snapshot(
             settings.versions_days,
         )
         version_written = version_written or wrote
+    if tool.sync_tree:
+        await asyncio.to_thread(
+            docs.sync_tree,
+            settings,
+            document.dir_name,
+            set(snapshot.files),
+            set(snapshot.folders),
+        )
 
     existing = await session.execute(
         select(Page).where(Page.document_id == doc_id).order_by(Page.ordinal)

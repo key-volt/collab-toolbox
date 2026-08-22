@@ -10,7 +10,7 @@
 		# A reverse proxy in front of this container arrives from a private address. Trusting
 		# those ranges makes logs and client-address checks see the forwarded client instead
 		# of the docker bridge. Safe only while the published ports are not world-reachable
-		# in proxied mode — the loopback publication in .env is what guarantees that.
+		# in proxied mode — the loopback BIND_ADDR in .env is what guarantees that.
 		trusted_proxies static private_ranges
 	}
 
@@ -52,6 +52,19 @@
 
 	handle_path /drawio/* {
 		root * /app/vendor/drawio
+		file_server
+	}
+
+	handle_path /sandbox/* {
+		root * /app/sandbox
+		# The sandbox page runs in an iframe at an opaque origin, so its every asset
+		# fetch is cross-origin. These are public static files; the API sends no such
+		# header, which is exactly what keeps sandboxed code away from it.
+		header Access-Control-Allow-Origin "*"
+		# The page's own policy: code from here only, WebAssembly and eval allowed
+		# (executing the visitor's code is the feature), all other network dead.
+		@page path / /index.html
+		header @page Content-Security-Policy "default-src 'none'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:; worker-src blob:; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; frame-ancestors 'self'"
 		file_server
 	}
 

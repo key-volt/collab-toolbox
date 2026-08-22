@@ -29,4 +29,12 @@ export default tseslint.config(
     files: ['**/*.js'],
     extends: [tseslint.configs.disableTypeChecked],
   },
+  {
+    // The sandbox engine runs as a plain script in a worker or on the sandbox page;
+    // loadPyodide arrives via importScripts rather than an import.
+    files: ['sandbox/public/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.worker, loadPyodide: 'readonly' },
+    },
+  },
 )

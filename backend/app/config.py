@@ -38,6 +38,13 @@ class Settings(BaseSettings):
 
     upload_max_mb: int = Field(default=25, ge=1)
 
+    registration_enabled: bool = True
+    registration_pending_max: int = Field(default=20, ge=1)
+
+    code_max_files: int = Field(default=200, ge=1)
+    code_max_file_kb: int = Field(default=512, ge=1)
+    code_max_project_mb: int = Field(default=20, ge=1)
+
     def read_secret(self, name: str) -> str:
         """Read a credential file mounted into the container.
 

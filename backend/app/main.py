@@ -5,6 +5,7 @@ schema would be readable without a session.
 """
 
 import asyncio
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
@@ -12,6 +13,7 @@ from fastapi import FastAPI
 
 from app.api import admin, auth, documents, files, health, tools
 from app.auth.ratelimit import SlidingWindowLimiter
+from app.auth.registration import SolvedChallenges
 from app.config import get_settings
 from app.db import create_engine, create_session_factory
 from app.storage.maintenance import maintenance_loop
@@ -30,6 +32,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.hub = RoomHub()
     app.state.login_limiter_by_username = SlidingWindowLimiter(10, 60)
     app.state.login_limiter_by_ip = SlidingWindowLimiter(30, 60)
+    # Registration protection. The challenge-signing key is random per boot: challenges
+    # live minutes, so a restart only costs an applicant one widget refresh, and the
+    # signing key never has to be stored anywhere.
+    app.state.registration_hmac_key = secrets.token_hex(32)
+    app.state.registration_solved = SolvedChallenges()
+    app.state.registration_limiter_by_ip = SlidingWindowLimiter(3, 3600)
+    app.state.registration_limiter_global = SlidingWindowLimiter(100, 86400)
     maintenance = asyncio.create_task(maintenance_loop(app))
     try:
         async with app.state.hub.server:

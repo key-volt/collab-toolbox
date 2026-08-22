@@ -30,6 +30,7 @@ def _serialize(content: dict[str, Any]) -> bytes:
 class PaintTool:
     slug = "paint"
     title = "Paint"
+    sync_tree = False
 
     def initial_files(self) -> dict[str, bytes]:
         return {_page_filename(1): _serialize(EMPTY_PAGE)}

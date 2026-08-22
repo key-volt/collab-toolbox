@@ -17,6 +17,7 @@ FILENAME = "document.drawio"
 class DrawioTool:
     slug = "drawio"
     title = "Diagrams"
+    sync_tree = False
 
     def initial_files(self) -> dict[str, bytes]:
         return {FILENAME: file_template().encode("utf-8")}
