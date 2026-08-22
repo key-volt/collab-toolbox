@@ -12,6 +12,8 @@ import {
 interface PaintDebug {
   elementCount: () => number
   sceneCount: () => number
+  sceneCountAll: () => number
+  activeTool: () => string
   collaboratorCount: () => number
   setTool: (tool: string) => void
   undo: () => void
@@ -33,17 +35,23 @@ async function sceneCount(page: Page): Promise<number> {
 }
 
 // Tool selection goes through the editor's own API — a keyboard shortcut depends on
-// where focus happens to be, which a test must not. The drawing itself is real mouse
-// input on the canvas.
+// where focus happens to be, which a test must not. The tool change flows through
+// React state, so the drag waits until the editor actually reports the tool as active;
+// the drawing itself is real mouse input on the canvas.
 async function drawRectangle(page: Page, x: number, y: number): Promise<void> {
   const canvas = page.locator('.excalidraw canvas').first()
   await canvas.waitFor()
   await page.evaluate(() => window.__paintDebug?.setTool('rectangle'))
+  await expect
+    .poll(() => page.evaluate(() => window.__paintDebug?.activeTool() ?? 'no debug handle'))
+    .toBe('rectangle')
   const box = await canvas.boundingBox()
   if (box === null) throw new Error('canvas has no size')
   await page.mouse.move(box.x + x, box.y + y)
   await page.mouse.down()
-  await page.mouse.move(box.x + x + 120, box.y + y + 80, { steps: 5 })
+  await page.waitForTimeout(50)
+  await page.mouse.move(box.x + x + 120, box.y + y + 80, { steps: 10 })
+  await page.waitForTimeout(50)
   await page.mouse.up()
 }
 
@@ -72,9 +80,11 @@ test('paint: edits converge, undo is per user, cursors are page-isolated, reconn
   await expect.poll(() => elementCount(pageA), { timeout: 30_000 }).toBe(0)
   await expect.poll(() => elementCount(pageB), { timeout: 30_000 }).toBe(0)
 
-  // A draws. The canvas must register the shape first (scene), then the shared
-  // document — a failure here names which half of the chain broke.
+  // A draws. The assertions walk the chain one link at a time — tool active, element
+  // ever created, element alive in the scene, element in the shared document, element
+  // on the other client — so a failure names its exact link.
   await drawRectangle(pageA, 150, 150)
+  await expect.poll(() => pageA.evaluate(() => window.__paintDebug?.sceneCountAll() ?? -1)).toBeGreaterThan(0)
   await expect.poll(() => sceneCount(pageA)).toBeGreaterThan(0)
   await expect.poll(() => elementCount(pageA)).toBe(1)
   await expect.poll(() => elementCount(pageB)).toBe(1)

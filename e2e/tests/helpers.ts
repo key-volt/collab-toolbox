@@ -2,13 +2,23 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test'
 
 export const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? ''
 
+// One admin login per run, not per helper call: the service rate-limits logins per
+// username, and a retrying suite would otherwise burn through that budget and then
+// fail on the limiter instead of the thing under test.
+let cachedAdminToken: string | null = null
+
 export async function adminToken(request: APIRequestContext): Promise<string> {
+  if (cachedAdminToken !== null) return cachedAdminToken
   const response = await request.post('/api/auth/login', {
     data: { username: 'admin', password: ADMIN_PASSWORD },
   })
-  expect(response.ok(), 'admin login must succeed — is E2E_ADMIN_PASSWORD set?').toBe(true)
+  if (!response.ok()) {
+    const body = await response.text()
+    throw new Error(`admin login failed with status ${String(response.status())}: ${body}`)
+  }
   const body = (await response.json()) as { access_token: string }
-  return body.access_token
+  cachedAdminToken = body.access_token
+  return cachedAdminToken
 }
 
 export async function createWhitelistedUser(

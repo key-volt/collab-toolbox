@@ -322,6 +322,8 @@ export function PaintEditor({ docId }: { docId: string }) {
     debugWindow.__paintDebug = {
       elementCount: () => elementsOf(page).length,
       sceneCount: () => excalidrawAPI.getSceneElements().length,
+      sceneCountAll: () => excalidrawAPI.getSceneElementsIncludingDeleted().length,
+      activeTool: () => (excalidrawAPI.getAppState() as { activeTool: { type: string } }).activeTool.type,
       collaboratorCount: () => bindingRef.current?.collaborators.size ?? 0,
       setTool: (tool: string) => {
         excalidrawAPI.setActiveTool({ type: tool } as never)

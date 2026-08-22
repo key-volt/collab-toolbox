@@ -39,6 +39,8 @@ interface DrawioWindow {
   RESOURCE_BASE?: string
   STENCIL_PATH?: string
   SHAPES_PATH?: string
+  IMAGE_PATH?: string
+  STYLE_PATH?: string
   PLUGINS_BASE_PATH?: string
   urlParams?: Record<string, string>
 }
@@ -90,6 +92,8 @@ function configure(): void {
   drawioWindow.RESOURCE_BASE = `${DRAWIO_BASE}resources/dia`
   drawioWindow.STENCIL_PATH = `${DRAWIO_BASE}stencils`
   drawioWindow.SHAPES_PATH = `${DRAWIO_BASE}shapes`
+  drawioWindow.IMAGE_PATH = `${DRAWIO_BASE}images`
+  drawioWindow.STYLE_PATH = `${DRAWIO_BASE}styles`
   drawioWindow.PLUGINS_BASE_PATH = DRAWIO_BASE
   // stealth stops draw.io fetching fonts and other resources from third parties —
   // nothing leaves this host at runtime. demo makes it create a blank local file
