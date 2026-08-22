@@ -55,6 +55,10 @@ const graphicsHost = document.getElementById('graphics')
 if (terminalHost === null || graphicsHost === null) {
   throw new Error('sandbox layout is missing')
 }
+// Narrowing does not flow into the functions declared below, so the checked values
+// carry their non-null type explicitly from here on.
+const termPane: HTMLElement = terminalHost
+const graphicsPane: HTMLElement = graphicsHost
 
 const term = new Terminal({
   cursorBlink: true,
@@ -69,7 +73,7 @@ const term = new Terminal({
 })
 const fit = new FitAddon()
 term.loadAddon(fit)
-term.open(terminalHost)
+term.open(termPane)
 fit.fit()
 new ResizeObserver(() => {
   try {
@@ -77,7 +81,7 @@ new ResizeObserver(() => {
   } catch {
     // a hidden terminal cannot be measured; the next resize fits it again
   }
-}).observe(terminalHost)
+}).observe(termPane)
 
 let stage = 'starting'
 let engineState: 'booting' | 'ready' | 'busy' = 'booting'
@@ -208,8 +212,8 @@ function startPageEngine(): Engine {
 // ——— graphics ————————————————————————————————————————————————————————————————
 
 function showGraphics(node: Node): void {
-  graphicsHost.replaceChildren(node)
-  graphicsHost.classList.add('has-content')
+  graphicsPane.replaceChildren(node)
+  graphicsPane.classList.add('has-content')
   graphicsCount += 1
 }
 

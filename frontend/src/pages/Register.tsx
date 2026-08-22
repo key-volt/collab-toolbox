@@ -70,7 +70,7 @@ export function Register() {
           Register an account. It needs approval by the administrator before it can see
           anything.
         </p>
-        <Field label="Username (3–32 characters: letters, digits, . _ -)">
+        <Field label="Username (3-32 characters: letters, digits, . _ -)">
           <TextInput
             name="username"
             autoComplete="username"

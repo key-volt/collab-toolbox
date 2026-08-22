@@ -15,10 +15,13 @@ from pathlib import Path
 CDN = "https://cdn.jsdelivr.net/pyodide/v{version}/full/"
 
 # The interpreter itself. These carry no lock-file hash; they are pinned by the
-# versioned path, the same immutability class as a pinned base-image tag.
+# versioned path, the same immutability class as a pinned base-image tag. The set is
+# what this release's own loaders reference: both pyodide.js and pyodide.mjs fetch
+# exactly pyodide.asm.mjs, pyodide.asm.wasm, python_stdlib.zip and pyodide-lock.json.
 RUNTIME_FILES = (
     "pyodide.js",
-    "pyodide.asm.js",
+    "pyodide.mjs",
+    "pyodide.asm.mjs",
     "pyodide.asm.wasm",
     "python_stdlib.zip",
     "pyodide-lock.json",

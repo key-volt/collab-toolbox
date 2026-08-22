@@ -27,7 +27,7 @@ def username_error(username: str, admin_username: str) -> str | None:
     """Why a requested username is not acceptable, or None when it is."""
     if not USERNAME_PATTERN.match(username):
         return (
-            "usernames are 3–32 characters: letters, digits, '.', '_' and '-', "
+            "usernames are 3-32 characters: letters, digits, '.', '_' and '-', "
             "starting with a letter or digit"
         )
     if username.lower() == admin_username.lower():
