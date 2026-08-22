@@ -69,14 +69,18 @@ export function uniqueName(prefix: string): string {
 }
 
 // Any script error in either browser lands in the test output, so a failure report
-// carries its own diagnosis instead of a bare timeout.
+// carries its own diagnosis instead of a bare timeout. Console errors carry their
+// source URL: a network failure's message text is only "Failed to load resource…",
+// and without the URL nobody can tell an expected pre-login 401 probe from a real
+// missing asset.
 export function captureBrowserErrors(page: Page, label: string): void {
   page.on('pageerror', (error) => {
     console.log(`[${label} pageerror] ${error.message}`)
   })
   page.on('console', (message) => {
     if (message.type() === 'error') {
-      console.log(`[${label} console.error] ${message.text()}`)
+      const url = message.location().url
+      console.log(`[${label} console.error] ${message.text()}${url === '' ? '' : ` (${url})`}`)
     }
   })
 }

@@ -13,6 +13,7 @@ interface PaintDebug {
   elementCount: () => number
   sceneCount: () => number
   sceneCountAll: () => number
+  everSceneCount: () => number
   activeTool: () => string
   collaboratorCount: () => number
   setTool: (tool: string) => void
@@ -34,19 +35,45 @@ async function sceneCount(page: Page): Promise<number> {
   return page.evaluate(() => window.__paintDebug?.sceneCount() ?? -1)
 }
 
-// Tool selection goes through the editor's own API — a keyboard shortcut depends on
-// where focus happens to be, which a test must not. The tool change flows through
-// React state, so the drag waits until the editor actually reports the tool as active;
-// the drawing itself is real mouse input on the canvas.
+async function everSceneCount(page: Page): Promise<number> {
+  return page.evaluate(() => window.__paintDebug?.everSceneCount() ?? -1)
+}
+
+// Excalidraw floats its own UI over the canvas: with a drawing tool active, a 200px-wide
+// shape-properties island docks over the top-left of the canvas, the toolbar hangs over
+// the top-center, and the zoom/undo island sits bottom-left. A pointer that lands on any
+// of them starts no shape and raises no error. Every drawing coordinate in this file
+// therefore stays inside the clear region (x ≥ 260, y ≥ 90, extents away from the
+// bottom edge), and the drag hit-tests its exact starting point before pressing the
+// button — so a future layout change fails by naming the covering element instead of
+// timing out on a zero count.
 async function drawRectangle(page: Page, x: number, y: number): Promise<void> {
   const canvas = page.locator('.excalidraw canvas').first()
   await canvas.waitFor()
+  // Tool selection goes through the editor's own API — a keyboard shortcut depends on
+  // where focus happens to be, which a test must not. The change flows through React
+  // state, so the drag waits until the editor actually reports the tool as active.
   await page.evaluate(() => window.__paintDebug?.setTool('rectangle'))
   await expect
     .poll(() => page.evaluate(() => window.__paintDebug?.activeTool() ?? 'no debug handle'))
     .toBe('rectangle')
   const box = await canvas.boundingBox()
   if (box === null) throw new Error('canvas has no size')
+  const covering = await page.evaluate(
+    ([pointX, pointY]) => {
+      const hit = document.elementFromPoint(pointX, pointY)
+      if (hit === null) return 'nothing'
+      if (hit instanceof HTMLCanvasElement) return 'canvas'
+      return `<${hit.tagName.toLowerCase()} class="${hit.getAttribute('class') ?? ''}">`
+    },
+    [box.x + x, box.y + y],
+  )
+  if (covering !== 'canvas') {
+    throw new Error(
+      `nothing can be drawn at (${String(x)}, ${String(y)}): the point is covered by ` +
+        `${covering} — move the drag clear of the editor's floating UI`,
+    )
+  }
   await page.mouse.move(box.x + x, box.y + y)
   await page.mouse.down()
   await page.waitForTimeout(50)
@@ -80,17 +107,18 @@ test('paint: edits converge, undo is per user, cursors are page-isolated, reconn
   await expect.poll(() => elementCount(pageA), { timeout: 30_000 }).toBe(0)
   await expect.poll(() => elementCount(pageB), { timeout: 30_000 }).toBe(0)
 
-  // A draws. The assertions walk the chain one link at a time — tool active, element
-  // ever created, element alive in the scene, element in the shared document, element
-  // on the other client — so a failure names its exact link.
-  await drawRectangle(pageA, 150, 150)
-  await expect.poll(() => pageA.evaluate(() => window.__paintDebug?.sceneCountAll() ?? -1)).toBeGreaterThan(0)
+  // A draws. The assertions walk the chain one link at a time — tool active and canvas
+  // hit (inside the draw), shape ever registered by the canvas, shape alive in the
+  // scene, shape in the shared document, shape on the other client — so a failure
+  // names its exact link.
+  await drawRectangle(pageA, 300, 160)
+  await expect.poll(() => everSceneCount(pageA)).toBeGreaterThan(0)
   await expect.poll(() => sceneCount(pageA)).toBeGreaterThan(0)
   await expect.poll(() => elementCount(pageA)).toBe(1)
   await expect.poll(() => elementCount(pageB)).toBe(1)
 
   // B edits too; both see two elements.
-  await drawRectangle(pageB, 340, 220)
+  await drawRectangle(pageB, 480, 280)
   await expect.poll(() => elementCount(pageA)).toBe(2)
   await expect.poll(() => elementCount(pageB)).toBe(2)
 
@@ -104,10 +132,14 @@ test('paint: edits converge, undo is per user, cursors are page-isolated, reconn
   await expect.poll(() => elementCount(pageA)).toBe(0)
   await expect.poll(() => elementCount(pageB)).toBe(0)
 
-  // Cursors: B sees A while both look at the same page…
-  await drawRectangle(pageA, 200, 200)
-  await pageA.mouse.move(300, 300)
-  await pageA.mouse.move(360, 340)
+  // Cursors: B sees A while both look at the same page. The pointer wander stays over
+  // the canvas clear region — pointer positions only reach awareness while the pointer
+  // is actually on the canvas.
+  await drawRectangle(pageA, 300, 320)
+  const boxA = await pageA.locator('.excalidraw canvas').first().boundingBox()
+  if (boxA === null) throw new Error('canvas has no size')
+  await pageA.mouse.move(boxA.x + 500, boxA.y + 200)
+  await pageA.mouse.move(boxA.x + 560, boxA.y + 240)
   await expect
     .poll(() => pageB.evaluate(() => window.__paintDebug?.collaboratorCount() ?? -1), {
       timeout: 15_000,
@@ -125,7 +157,7 @@ test('paint: edits converge, undo is per user, cursors are page-isolated, reconn
 
   // Reconnect: kill B's socket, let A edit meanwhile, and B converges after recovery.
   await pageB.evaluate(() => window.__paintDebug?.dropConnection())
-  await drawRectangle(pageA, 420, 160)
+  await drawRectangle(pageA, 520, 160)
   await expect.poll(() => elementCount(pageA)).toBe(2)
   await expect.poll(() => elementCount(pageB), { timeout: 30_000 }).toBe(2)
 

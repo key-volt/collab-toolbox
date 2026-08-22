@@ -186,6 +186,11 @@ export class ExcalidrawBinding {
       this.subscriptions.push(() => {
         bindingAwareness.off("change", _remoteAwarenessChangeHandler);
       });
+      // The initial roster goes through the same rebuild as every later change, so a
+      // freshly bound page starts with the pageId filter already applied — an
+      // unfiltered starting map could otherwise sit stale for many seconds, because a
+      // peer that neither moves nor edits emits no awareness change to correct it.
+      _remoteAwarenessChangeHandler();
     }
 
     const undoManager = this.undoManager;
@@ -210,26 +215,6 @@ export class ExcalidrawBinding {
         .map((key) => this.yAssets.get(key) as BinaryFileData | StoredAsset | undefined)
         .filter((entry): entry is BinaryFileData | StoredAsset => entry != null),
     );
-
-    // init collaborators
-    if (bindingAwareness) {
-      const collaborators = new Map<string, Collaborator>()
-      for (const id of bindingAwareness.getStates().keys()) {
-        const state = bindingAwareness.getStates().get(id)
-        if (!state) continue
-        collaborators.set(id.toString(), {
-          pointer: state.pointer,
-          button: state.button,
-          selectedElementIds: state.selectedElementIds,
-          username: state.user?.name,
-          color: state.user?.color,
-          avatarUrl: state.user?.avatarUrl,
-          userState: state.user?.state,
-        } as Collaborator);
-      }
-      this.api.updateScene({ collaborators: collaborators as never });
-      this.collaborators = collaborators;
-    }
   }
 
   private addResolvedFiles(entries: (BinaryFileData | StoredAsset)[]) {

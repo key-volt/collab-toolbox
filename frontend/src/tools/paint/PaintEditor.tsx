@@ -315,6 +315,17 @@ export function PaintEditor({ docId }: { docId: string }) {
       assetStore,
     )
     bindingRef.current = binding
+    // A high-water mark of how many elements the canvas has ever held while this page
+    // was bound, deleted ones included. The browser suite reads it to tell "the drag
+    // never created anything" apart from "something created it and something else
+    // removed it" in a single report.
+    let everSceneCount = excalidrawAPI.getSceneElementsIncludingDeleted().length
+    const stopCountingScene = excalidrawAPI.onChange(() => {
+      everSceneCount = Math.max(
+        everSceneCount,
+        excalidrawAPI.getSceneElementsIncludingDeleted().length,
+      )
+    })
     // Deterministic handles for the browser test suite; they carry no secrets. Tool
     // selection and undo go through the imperative APIs because keyboard shortcuts
     // depend on where focus happens to be, which a test must not.
@@ -323,6 +334,7 @@ export function PaintEditor({ docId }: { docId: string }) {
       elementCount: () => elementsOf(page).length,
       sceneCount: () => excalidrawAPI.getSceneElements().length,
       sceneCountAll: () => excalidrawAPI.getSceneElementsIncludingDeleted().length,
+      everSceneCount: () => everSceneCount,
       activeTool: () => (excalidrawAPI.getAppState() as { activeTool: { type: string } }).activeTool.type,
       collaboratorCount: () => bindingRef.current?.collaborators.size ?? 0,
       setTool: (tool: string) => {
@@ -337,6 +349,7 @@ export function PaintEditor({ docId }: { docId: string }) {
       },
     }
     return () => {
+      stopCountingScene()
       binding.destroy()
       bindingRef.current = null
     }
