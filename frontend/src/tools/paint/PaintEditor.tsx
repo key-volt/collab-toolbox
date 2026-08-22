@@ -304,21 +304,31 @@ export function PaintEditor({ docId }: { docId: string }) {
       undoManager = new Y.UndoManager(elementsOf(page), { trackedOrigins: new Set() })
       undoManagersRef.current.set(currentPageId, undoManager)
     }
+    const pageUndoManager = undoManager
     awareness.setLocalStateField('pageId', currentPageId)
     const binding = new ExcalidrawBinding(
       elementsOf(page),
       assetsOf(page),
       excalidrawAPI,
       awareness,
-      { excalidrawDom: dom, undoManager },
+      { excalidrawDom: dom, undoManager: pageUndoManager },
       assetStore,
     )
     bindingRef.current = binding
-    // Deterministic handles for the browser test suite; they carry no secrets.
+    // Deterministic handles for the browser test suite; they carry no secrets. Tool
+    // selection and undo go through the imperative APIs because keyboard shortcuts
+    // depend on where focus happens to be, which a test must not.
     const debugWindow = window as unknown as { __paintDebug?: unknown }
     debugWindow.__paintDebug = {
       elementCount: () => elementsOf(page).length,
+      sceneCount: () => excalidrawAPI.getSceneElements().length,
       collaboratorCount: () => bindingRef.current?.collaborators.size ?? 0,
+      setTool: (tool: string) => {
+        excalidrawAPI.setActiveTool({ type: tool } as never)
+      },
+      undo: () => {
+        pageUndoManager.undo()
+      },
       dropConnection: () => {
         const socket = (sessionRef.current?.provider as unknown as { ws?: WebSocket } | null)?.ws
         socket?.close()

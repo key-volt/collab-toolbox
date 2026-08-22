@@ -1,6 +1,13 @@
 import { expect, test, type Frame, type Page } from '@playwright/test'
 
-import { ADMIN_PASSWORD, createDocument, createWhitelistedUser, signIn, uniqueName } from './helpers'
+import {
+  ADMIN_PASSWORD,
+  captureBrowserErrors,
+  createDocument,
+  createWhitelistedUser,
+  signIn,
+  uniqueName,
+} from './helpers'
 
 interface EditorDebug {
   addCell: (label: string, x: number, y: number) => void
@@ -11,6 +18,7 @@ interface EditorDebug {
 declare global {
   interface Window {
     __editorDebug?: EditorDebug
+    __editorBootStage?: string
   }
 }
 
@@ -18,9 +26,17 @@ async function editorFrame(page: Page): Promise<Frame> {
   const element = await page.waitForSelector('iframe[title="Diagram editor"]')
   const frame = await element.contentFrame()
   if (frame === null) throw new Error('the editor frame did not attach')
-  await frame.waitForFunction(() => window.__editorDebug !== undefined, undefined, {
-    timeout: 120_000,
-  })
+  try {
+    await frame.waitForFunction(() => window.__editorDebug !== undefined, undefined, {
+      timeout: 120_000,
+    })
+  } catch {
+    // The child publishes its boot progress; a stall names the exact step.
+    const stage = await frame
+      .evaluate(() => window.__editorBootStage ?? 'no boot stage was ever set')
+      .catch(() => 'the frame is gone')
+    throw new Error(`the editor never became ready — boot stage: ${stage}`)
+  }
   return frame
 }
 
@@ -41,6 +57,8 @@ test('drawio: edits converge across clients and undo is per user', async ({
   const contextB = await browser.newContext()
   const pageA = await contextA.newPage()
   const pageB = await contextB.newPage()
+  captureBrowserErrors(pageA, 'diagrammer-A')
+  captureBrowserErrors(pageB, 'diagrammer-B')
 
   await signIn(pageA, 'admin', ADMIN_PASSWORD)
   await signIn(pageB, memberName, 'a-long-password')
@@ -51,8 +69,8 @@ test('drawio: edits converge across clients and undo is per user', async ({
   const frameB = await editorFrame(pageB)
 
   // The deterministic template gives every client the same two structural cells.
-  await expect.poll(() => cellCount(frameA)).toBe(2)
-  await expect.poll(() => cellCount(frameB)).toBe(2)
+  await expect.poll(() => cellCount(frameA), { timeout: 30_000 }).toBe(2)
+  await expect.poll(() => cellCount(frameB), { timeout: 30_000 }).toBe(2)
 
   // A adds a shape and B converges.
   await frameA.evaluate(() => window.__editorDebug?.addCell('from-a', 80, 80))

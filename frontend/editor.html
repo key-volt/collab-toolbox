@@ -12,6 +12,8 @@
         overflow: hidden;
         background: #0b0b0d;
       }
+      /* The editor container is visible and sized from the start — the editor measures
+         it during initialization. The overlay covers it until the editor is ready. */
       #drawio-container {
         position: absolute;
         inset: 0;
@@ -19,17 +21,19 @@
       #editor-loading {
         position: absolute;
         inset: 0;
+        z-index: 10;
         display: flex;
         align-items: center;
         justify-content: center;
+        background: #0b0b0d;
         color: #9a9aa5;
         font: 13px ui-sans-serif, system-ui, sans-serif;
       }
     </style>
   </head>
   <body>
+    <div id="drawio-container" class="geEditor"></div>
     <div id="editor-loading">loading the editor…</div>
-    <div id="drawio-container" class="geEditor" style="display: none"></div>
     <script type="module" src="/src/drawio-entry.ts"></script>
   </body>
 </html>

@@ -108,24 +108,36 @@ function waitForApp(): Promise<DrawioAppConstructor> {
   })
 }
 
+// Every stage is published on the window and mirrored into the overlay, so a boot that
+// stalls names the exact step it stalled on — in a screenshot, in a page snapshot, and
+// to the browser test suite.
+function setBootStage(stage: string): void {
+  ;(window as unknown as { __editorBootStage?: string }).__editorBootStage = stage
+  const loading = document.getElementById('editor-loading')
+  if (loading !== null) loading.textContent = `loading the editor… (${stage})`
+}
+
 function showEditor(): void {
   document.getElementById('editor-loading')?.remove()
-  const container = document.getElementById('drawio-container')
-  if (container !== null) container.style.removeProperty('display')
 }
 
 async function boot(): Promise<void> {
+  setBootStage('configuring')
   configure()
   linkStylesheet(`${DRAWIO_BASE}mxgraph/css/common.css`)
   linkStylesheet(`${DRAWIO_BASE}styles/grapheditor.css`)
+  setBootStage('loading the support script')
   try {
     await loadScript(`${DRAWIO_BASE}js/PreConfig.js`)
   } catch {
     // PreConfig is optional configuration; the app script carries the editor itself.
   }
+  setBootStage('loading the editor script')
   await loadScript(`${DRAWIO_BASE}js/app.min.js`)
+  setBootStage('waiting for the editor to define itself')
   const App = await waitForApp()
 
+  setBootStage('connecting to the shell')
   const doc = new Y.Doc()
   const provider = createIframeBridgeProvider(doc, { consistencyCheckInterval: 30_000 })
 
@@ -133,9 +145,10 @@ async function boot(): Promise<void> {
   const bindWhenReady = () => {
     if (booted) return
     booted = true
+    setBootStage('starting the editor')
     App.main(
       (ui) => {
-        showEditor()
+        setBootStage('opening the document')
         ui.refresh()
         window.dispatchEvent(new Event('resize'))
         const attach = (file: DrawioFile) => {
@@ -182,6 +195,10 @@ async function boot(): Promise<void> {
               manager?.undo?.()
             },
           }
+
+          setBootStage('ready')
+          showEditor()
+          window.dispatchEvent(new Event('resize'))
         }
         const file = ui.currentFile
         if (file !== null) {
@@ -218,9 +235,7 @@ async function boot(): Promise<void> {
 }
 
 void boot().catch((error: unknown) => {
-  const loading = document.getElementById('editor-loading')
-  if (loading !== null) {
-    loading.textContent = 'the editor could not start — check the container logs'
-  }
+  const message = error instanceof Error ? error.message : 'unknown failure'
+  setBootStage(`failed: ${message}`)
   console.error('[editor] boot failed:', error)
 })

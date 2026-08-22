@@ -57,3 +57,16 @@ export async function signIn(page: Page, username: string, password: string): Pr
 export function uniqueName(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.floor(Math.random() * 10_000).toString(36)}`
 }
+
+// Any script error in either browser lands in the test output, so a failure report
+// carries its own diagnosis instead of a bare timeout.
+export function captureBrowserErrors(page: Page, label: string): void {
+  page.on('pageerror', (error) => {
+    console.log(`[${label} pageerror] ${error.message}`)
+  })
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      console.log(`[${label} console.error] ${message.text()}`)
+    }
+  })
+}

@@ -207,7 +207,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: browser-report
-          path: e2e/playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
           retention-days: 7
 
       - name: Stop the stack
