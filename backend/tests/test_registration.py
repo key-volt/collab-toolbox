@@ -32,7 +32,9 @@ def solved_payload(client: TestClient) -> str:
 
 
 def register(client: TestClient, username: str, altcha: str | None = None) -> Response:
-    return client.post(
+    # mypy types this call as Any under the installed toolchain despite starlette's
+    # annotations; the typed local keeps the helper's declared return honest.
+    response: Response = client.post(
         "/api/auth/register",
         json={
             "username": username,
@@ -40,6 +42,7 @@ def register(client: TestClient, username: str, altcha: str | None = None) -> Re
             "altcha": altcha if altcha is not None else solved_payload(client),
         },
     )
+    return response
 
 
 def test_the_challenge_endpoint_answers_with_a_signed_challenge(client: TestClient) -> None:

@@ -30,11 +30,14 @@ def push(
     body: dict[str, Any] = {"files": files}
     if folders is not None:
         body["folders"] = folders
-    return client.post(
+    # mypy types this call as Any under the installed toolchain despite starlette's
+    # annotations; the typed local keeps the helper's declared return honest.
+    response: Response = client.post(
         f"/api/tools/code/{doc_id}/snapshot",
         content=json.dumps(body).encode("utf-8"),
         headers=bearer(token),
     )
+    return response
 
 
 def project_dir(booted: Path, title_slug: str) -> Path:
