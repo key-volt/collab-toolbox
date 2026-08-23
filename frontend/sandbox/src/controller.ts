@@ -2,9 +2,10 @@
 // engine over messages. This page runs at an opaque origin with a network-dead CSP —
 // it holds no cookies, no tokens, and can reach nothing but the /sandbox/ assets.
 //
-// The engine runs in a Worker built from a blob (an opaque origin cannot start a URL
-// worker), so Stop can always terminate it. Where blob workers are unavailable the
-// engine runs on this page's own thread instead, and Stop becomes a page reload.
+// The engine prefers a Worker built from a blob (an opaque origin cannot start a URL
+// worker) and falls back to this page's own thread wherever the platform refuses
+// that. Stop is owned by the HOST page as a frame reset, so it never depends on
+// anything in here cooperating.
 
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
@@ -105,11 +106,16 @@ function writeOutput(text: string): void {
   term.write(text.replace(/\r?\n/g, '\r\n'))
 }
 
-// ——— the engine, worker-first ———————————————————————————————————————————————
+// ——— the engine ————————————————————————————————————————————————————————————
+//
+// Worker-first, page-thread fallback. Blob module workers at an opaque origin sit on
+// a specification gap with browser-divergent behavior, so the worker is strictly a
+// best-effort upgrade: if it fails to start, the same engine module runs on this
+// page's thread instead. Stopping never depends on either mode cooperating — the
+// host page resets the whole frame.
 
 interface Engine {
   send: (command: EngineCommand) => void
-  stop: () => void
 }
 
 let engine: Engine | null = null
@@ -145,46 +151,15 @@ function handleEngineMessage(message: EngineMessage): void {
       showSvg(message.data ?? '')
       break
     case 'fatal':
-      setStage('failed', message.text)
+      setStage('failed', message.text ?? 'unknown')
       writeOutput(`\nsandbox failed: ${message.text ?? 'unknown'}\n`)
       break
   }
 }
 
-function startWorkerEngine(): Engine | null {
-  try {
-    // An opaque origin cannot start a URL worker, so the worker is a blob module that
-    // imports the engine. It must be a MODULE worker: this Pyodide generation is ESM
-    // (pyodide.asm.mjs) and no longer supports classic workers at all.
-    const bootstrap = `import ${JSON.stringify(new URL('worker.js', window.location.href).href)};`
-    const blobUrl = URL.createObjectURL(new Blob([bootstrap], { type: 'text/javascript' }))
-    const worker = new Worker(blobUrl, { type: 'module' })
-    worker.onmessage = (event: MessageEvent<EngineMessage>) => handleEngineMessage(event.data)
-    worker.onerror = (event: ErrorEvent) => {
-      setStage('failed', event.message)
-      writeOutput(`\nsandbox worker error: ${event.message}\n`)
-    }
-    return {
-      send: (command) => worker.postMessage(command),
-      stop: () => {
-        worker.terminate()
-        writeOutput('\n' + RED + 'stopped' + RESET + '\n')
-        engineState = 'booting'
-        setStage('restarting')
-        engine = startWorkerEngine()
-        if (engine !== null && latestFiles.length > 0) {
-          engine.send({ cmd: 'files', files: latestFiles })
-        }
-      },
-    }
-  } catch {
-    return null
-  }
-}
-
 function startPageEngine(): Engine {
-  // No blob module workers here: run the same engine module on this page's thread.
-  // Stop then becomes a reload of the frame.
+  // The same engine module, on this page's thread. During a long computation the
+  // frame is busy; Stop lives in the host page and resets the frame regardless.
   const globals = window as unknown as {
     __sandboxEngineReceive?: (message: EngineMessage) => void
     __sandboxEngineSend?: (command: EngineCommand) => void
@@ -201,7 +176,46 @@ function startPageEngine(): Engine {
       if (globals.__sandboxEngineSend === undefined) queued.push(command)
       else globals.__sandboxEngineSend(command)
     },
-    stop: () => window.location.reload(),
+  }
+}
+
+function startWorkerEngine(): Engine | null {
+  try {
+    // An opaque origin cannot start a URL worker, so the worker is a blob module that
+    // imports the engine (a MODULE worker — this Pyodide generation is ESM only).
+    const bootstrap = `import ${JSON.stringify(new URL('worker.js', window.location.href).href)};`
+    const blobUrl = URL.createObjectURL(new Blob([bootstrap], { type: 'text/javascript' }))
+    const worker = new Worker(blobUrl, { type: 'module' })
+    let failedOver = false
+    const pending: EngineCommand[] = []
+    worker.onmessage = (event: MessageEvent<EngineMessage>) => {
+      pending.length = 0 // the worker is alive; nothing to replay on a failover
+      handleEngineMessage(event.data)
+    }
+    // A worker that cannot start fires a plain error event (often with no message at
+    // all) before any code of ours runs. That is the platform saying no — fall back
+    // to the page thread and replay what was already sent.
+    worker.onerror = () => {
+      if (failedOver) return
+      failedOver = true
+      worker.terminate()
+      setStage('starting', 'no worker here — running on the page thread')
+      engine = startPageEngine()
+      for (const command of pending.splice(0)) engine.send(command)
+      if (latestFiles.length > 0) engine.send({ cmd: 'files', files: latestFiles })
+    }
+    return {
+      send: (command) => {
+        if (failedOver) {
+          engine?.send(command)
+          return
+        }
+        pending.push(command)
+        worker.postMessage(command)
+      },
+    }
+  } catch {
+    return null
   }
 }
 
@@ -287,8 +301,7 @@ function replaceLine(next: string): void {
 
 term.onData((data) => {
   if (engineState !== 'ready') {
-    // Ctrl+C while something runs is the terminal-native way to say Stop.
-    if (data === CTRL_C) engine?.stop()
+    // While something runs, input waits; the host page's Stop resets the frame.
     return
   }
   for (const char of data) {
@@ -349,8 +362,6 @@ window.addEventListener('message', (event: MessageEvent) => {
     engineState = 'busy'
     term.write('\r\n' + DIM + `running ${data.path}` + RESET + '\r\n')
     engine?.send({ cmd: 'run', path: data.path, files: latestFiles })
-  } else if (data.type === 'stop') {
-    engine?.stop()
   }
 })
 

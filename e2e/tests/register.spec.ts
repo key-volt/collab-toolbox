@@ -16,8 +16,12 @@ test('a visitor registers through the captcha, waits, and enters once approved',
   await page.getByRole('link', { name: 'Register' }).click()
   await page.waitForURL((url) => url.pathname === '/register')
 
-  await page.getByLabel(/Username/).fill(username)
-  await page.getByLabel(/Password/).fill('a-long-password')
+  // The login screen has Username/Password labels too, and for an instant after the
+  // URL flips its inputs are still the ones in the DOM — a fill that races the route
+  // swap lands in fields React is about to throw away. These labels exist only on the
+  // register screen, so the fills cannot resolve early against the wrong form.
+  await page.getByLabel(/Username \(3-32/).fill(username)
+  await page.getByLabel(/Password \(at least 8/).fill('a-long-password')
 
   // The proof-of-work widget: arm it, let it solve, and the submit button unlocks.
   // The checkbox input sits under a decorative checkmark svg that intercepts clicks,

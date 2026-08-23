@@ -66,8 +66,8 @@ export function SandboxPanel({
     post({ type: 'run', path: activePath, files: getFiles() })
   }
 
-  const stop = () => post({ type: 'stop' })
-
+  // Stop is a full frame reset on purpose: it depends on nothing inside the frame, so
+  // it works even while the sandbox is stuck in a hot loop.
   const reset = useCallback(() => {
     loadsRef.current = 0
     setStage('starting')
@@ -93,8 +93,7 @@ export function SandboxPanel({
             {/* `runnable` already proves activePath is non-null (aliased narrowing). */}
             Run {runnable ? baseName(activePath) : ''}
           </Button>
-          <Button onClick={stop}>Stop</Button>
-          <Button onClick={reset}>Reset</Button>
+          <Button onClick={reset}>Stop</Button>
           <Button onClick={onClose}>Close</Button>
         </div>
       </header>
