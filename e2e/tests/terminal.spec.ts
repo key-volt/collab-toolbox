@@ -75,6 +75,7 @@ test('terminal: boots isolated, runs Python and plots, drives tkinter, and stops
           path: 'gui.py',
           text:
             'import tkinter as tk\n\nroot = tk.Tk()\nroot.title("Counter")\n' +
+            'root.geometry("240x160")\n' +
             'value = tk.IntVar()\ntk.Label(root, textvariable=value).pack()\n' +
             'tk.Button(root, text="inc", command=lambda: value.set(value.get() + 1)).pack()\n' +
             'root.mainloop()\nprint("gui ready")\n',
@@ -152,6 +153,20 @@ test('terminal: boots isolated, runs Python and plots, drives tkinter, and stops
   const guiWindow = sandboxFrame(page).locator('[data-tk-kind="window"]')
   await expect(guiWindow).toBeVisible()
   await expect(guiWindow.locator('[data-tk-kind="label"]')).toHaveText('0')
+
+  // The window (geometry 240x160) is far wider than the button; pack centers a
+  // widget in the free space like real Tk, so an off-center button here means
+  // the layout emulation regressed to edge-pinning.
+  const cardBox = await guiWindow.boundingBox()
+  const buttonBox = await guiWindow.locator('[data-tk-kind="button"]').boundingBox()
+  expect(cardBox).not.toBeNull()
+  expect(buttonBox).not.toBeNull()
+  if (cardBox !== null && buttonBox !== null) {
+    const cardCenter = cardBox.x + cardBox.width / 2
+    const buttonCenter = buttonBox.x + buttonBox.width / 2
+    expect(Math.abs(buttonCenter - cardCenter)).toBeLessThan(30)
+  }
+
   await guiWindow.locator('[data-tk-kind="button"]').click()
   await expect(guiWindow.locator('[data-tk-kind="label"]')).toHaveText('1')
 

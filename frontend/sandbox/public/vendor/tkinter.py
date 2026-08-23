@@ -374,6 +374,7 @@ class Misc:
         self._set_layout("pack", {
             "side": side, "fill": fill, "expand": 1 if expand else 0,
             "padx": padx, "pady": pady,
+            "anchor": str(anchor).lower() if anchor is not None else CENTER,
         })
 
     def grid(self, row=None, column=0, rowspan=1, columnspan=1, sticky="",
@@ -383,8 +384,23 @@ class Misc:
             "columnspan": columnspan, "sticky": sticky, "padx": padx, "pady": pady,
         })
 
-    def place(self, x=0, y=0, width=None, height=None, **ignored):
-        self._set_layout("place", {"x": x, "y": y, "width": width, "height": height})
+    def place(self, x=None, y=None, relx=None, rely=None, width=None, height=None,
+              relwidth=None, relheight=None, anchor="nw", bordermode=None, **rest):
+        # Positional options change meaning; anything not implemented must refuse
+        # loudly instead of quietly landing the widget at the top-left corner.
+        if rest:
+            names = ", ".join(sorted(rest))
+            raise TclError(f'unsupported place option(s) in this sandbox: {names}')
+        self._set_layout("place", {
+            "x": x, "y": y, "relx": relx, "rely": rely,
+            "width": width, "height": height,
+            "relwidth": relwidth, "relheight": relheight,
+            "anchor": str(anchor).lower(),
+        })
+
+    pack_configure = pack
+    grid_configure = grid
+    place_configure = place
 
     def _forget(self):
         if self._manager is not None:

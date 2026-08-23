@@ -388,6 +388,12 @@ function tkStr(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback
 }
 
+// Tk's "center" anchor value contains compass letters ('e', 'n'), so it must be
+// normalized away before any letter matching decides a direction.
+function anchorLetters(anchor: string): string {
+  return anchor === 'center' ? '' : anchor
+}
+
 function cssFont(value: unknown): string | null {
   if (typeof value === 'string') return value
   if (Array.isArray(value)) {
@@ -439,6 +445,10 @@ function buildTkWindow(wid: number, title: string): void {
   card.style.font = '13px ui-sans-serif, system-ui, sans-serif'
   card.style.outline = 'none'
   card.style.marginBottom = '8px'
+  // A real Tk window sizes to its content (or its geometry), not to the pane.
+  card.style.width = 'fit-content'
+  card.style.minWidth = '160px'
+  card.style.maxWidth = '100%'
 
   const titleBar = document.createElement('div')
   titleBar.style.display = 'flex'
@@ -720,11 +730,13 @@ function layoutTkWidget(rec: TkWidget, parent: TkWidget, manager: string, opts: 
   if (manager === 'pack') {
     if (body.style.display !== 'flex') {
       body.style.display = 'flex'
-      const side = tkStr(opts.side, 'top')
-      body.style.flexDirection = side === 'left' || side === 'right' ? 'row' : 'column'
-      body.style.alignItems = 'flex-start'
+      const firstSide = tkStr(opts.side, 'top')
+      body.style.flexDirection = firstSide === 'left' || firstSide === 'right' ? 'row' : 'column'
+      // Tk packs with anchor=center: free cross-axis space centers the widget.
+      body.style.alignItems = 'center'
       body.style.gap = '4px'
     }
+    const direction = body.style.flexDirection === 'row' ? 'row' : 'column'
     const padx = tkNum(opts.padx, 0)
     const pady = tkNum(opts.pady, 0)
     if (padx !== 0 || pady !== 0) el.style.margin = `${String(pady)}px ${String(padx)}px`
@@ -732,9 +744,31 @@ function layoutTkWidget(rec: TkWidget, parent: TkWidget, manager: string, opts: 
     const side = tkStr(opts.side, 'top')
     if (side === 'bottom') el.style.marginTop = 'auto'
     if (side === 'right') el.style.marginLeft = 'auto'
+    const anchor = anchorLetters(tkStr(opts.anchor, 'center'))
+    if (direction === 'column') {
+      if (anchor.includes('w')) el.style.alignSelf = 'flex-start'
+      if (anchor.includes('e')) el.style.alignSelf = 'flex-end'
+    } else {
+      if (anchor.includes('n')) el.style.alignSelf = 'flex-start'
+      if (anchor.includes('s')) el.style.alignSelf = 'flex-end'
+    }
     const fill = tkStr(opts.fill, 'none')
-    if (fill !== 'none') el.style.alignSelf = 'stretch'
-    if (tkNum(opts.expand, 0) !== 0) el.style.flexGrow = '1'
+    const crossFill = direction === 'column' ? 'x' : 'y'
+    const mainFill = direction === 'column' ? 'y' : 'x'
+    if (fill === 'both' || fill === crossFill) el.style.alignSelf = 'stretch'
+    if (tkNum(opts.expand, 0) !== 0) {
+      if (fill === 'both' || fill === mainFill) {
+        el.style.flexGrow = '1'
+      } else if (direction === 'column') {
+        // Tk's expand grows the parcel, not the widget: the free main-axis space
+        // becomes auto margins, split to wherever the anchor does not pin it.
+        if (!anchor.includes('n')) el.style.marginTop = 'auto'
+        if (!anchor.includes('s')) el.style.marginBottom = 'auto'
+      } else {
+        if (!anchor.includes('w')) el.style.marginLeft = 'auto'
+        if (!anchor.includes('e')) el.style.marginRight = 'auto'
+      }
+    }
     body.appendChild(el)
     return
   }
@@ -742,8 +776,9 @@ function layoutTkWidget(rec: TkWidget, parent: TkWidget, manager: string, opts: 
     if (body.style.display !== 'grid') {
       body.style.display = 'grid'
       body.style.gap = '4px'
-      body.style.justifyItems = 'start'
-      body.style.alignItems = 'start'
+      // Tk centers a widget in its cell unless sticky pins it to an edge.
+      body.style.justifyItems = 'center'
+      body.style.alignItems = 'center'
     }
     applyTkTracks(parent, 'row')
     applyTkTracks(parent, 'column')
@@ -758,6 +793,8 @@ function layoutTkWidget(rec: TkWidget, parent: TkWidget, manager: string, opts: 
     else if (sticky.includes('e')) el.style.justifySelf = 'end'
     else if (sticky.includes('w')) el.style.justifySelf = 'start'
     if (sticky.includes('n') && sticky.includes('s')) el.style.alignSelf = 'stretch'
+    else if (sticky.includes('n')) el.style.alignSelf = 'start'
+    else if (sticky.includes('s')) el.style.alignSelf = 'end'
     const padx = tkNum(opts.padx, 0)
     const pady = tkNum(opts.pady, 0)
     if (padx !== 0 || pady !== 0) el.style.margin = `${String(pady)}px ${String(padx)}px`
@@ -766,12 +803,25 @@ function layoutTkWidget(rec: TkWidget, parent: TkWidget, manager: string, opts: 
   }
   body.style.position = 'relative'
   el.style.position = 'absolute'
-  el.style.left = `${String(tkNum(opts.x, 0))}px`
-  el.style.top = `${String(tkNum(opts.y, 0))}px`
+  const relx = opts.relx
+  el.style.left = typeof relx === 'number' ? `${String(relx * 100)}%` : `${String(tkNum(opts.x, 0))}px`
+  const rely = opts.rely
+  el.style.top = typeof rely === 'number' ? `${String(rely * 100)}%` : `${String(tkNum(opts.y, 0))}px`
+  const relwidth = opts.relwidth
   const width = opts.width
-  if (typeof width === 'number') el.style.width = `${String(width)}px`
+  if (typeof relwidth === 'number') el.style.width = `${String(relwidth * 100)}%`
+  else if (typeof width === 'number') el.style.width = `${String(width)}px`
+  const relheight = opts.relheight
   const height = opts.height
-  if (typeof height === 'number') el.style.height = `${String(height)}px`
+  if (typeof relheight === 'number') el.style.height = `${String(relheight * 100)}%`
+  else if (typeof height === 'number') el.style.height = `${String(height)}px`
+  // The anchor names which point of the widget sits on (x, y); nw is Tk's default.
+  const anchor = anchorLetters(tkStr(opts.anchor, 'nw'))
+  const shiftX = anchor.includes('w') ? 0 : anchor.includes('e') ? -100 : -50
+  const shiftY = anchor.includes('n') ? 0 : anchor.includes('s') ? -100 : -50
+  if (shiftX !== 0 || shiftY !== 0) {
+    el.style.transform = `translate(${String(shiftX)}%, ${String(shiftY)}%)`
+  }
   body.appendChild(el)
 }
 
@@ -968,7 +1018,7 @@ function buildTkCanvasItem(item: TkCanvasItem): SVGElement | null {
     el.setAttribute('x', String(coords[0]))
     el.setAttribute('y', String(coords[1]))
     el.setAttribute('fill', stroke('fill', '#000000'))
-    const anchor = tkStr(opts.anchor, 'center')
+    const anchor = anchorLetters(tkStr(opts.anchor, 'center'))
     el.setAttribute('text-anchor', anchor.includes('w') ? 'start' : anchor.includes('e') ? 'end' : 'middle')
     el.setAttribute('dominant-baseline', anchor.includes('n') ? 'hanging' : anchor.includes('s') ? 'auto' : 'middle')
     const font = cssFont(opts.font)
