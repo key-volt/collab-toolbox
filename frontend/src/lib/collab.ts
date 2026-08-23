@@ -134,7 +134,7 @@ export function peersFrom(awareness: Awareness): Peer[] {
     peers.push({
       clientId,
       name: user?.name ?? `guest-${String(clientId)}`,
-      color: user?.color ?? '#6b6156',
+      color: user?.color ?? '#a1a1aa',
       canEdit: user?.canEdit === true,
     })
   }

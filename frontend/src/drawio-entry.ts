@@ -102,12 +102,14 @@ function configure(): void {
   drawioWindow.PLUGINS_BASE_PATH = DRAWIO_BASE
   // stealth stops draw.io fetching fonts and other resources from third parties —
   // nothing leaves this host at runtime. demo makes it create a blank local file
-  // instead of raising its "Save diagrams to:" storage dialog. The default (light)
-  // UI matches the app theme.
+  // instead of raising its "Save diagrams to:" storage dialog. The dark UI matches
+  // the app theme.
   drawioWindow.urlParams = {
     math: '0',
     stealth: '1',
     demo: '1',
+    ui: 'dark',
+    dark: '1',
   }
 }
 

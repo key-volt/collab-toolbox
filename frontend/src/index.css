@@ -4,18 +4,18 @@
 @import '@fontsource/inter/500.css';
 @import '@fontsource/inter/600.css';
 
-/* Warm paper theme. Every text color holds at least 4.5:1 against bg, surface and
-   raised, so nothing readable depends on which layer it happens to sit on. */
+/* Near-black graphite theme. Every text color holds at least 4.5:1 against bg,
+   surface and raised, so nothing readable depends on which layer it happens to sit on. */
 @theme {
-  --color-bg: #f5f0e8;
-  --color-surface: #fdfaf5;
-  --color-raised: #efe8dc;
-  --color-border: #ddd3c4;
-  --color-text: #201c18;
-  --color-muted: #6b6156;
-  --color-accent: #4653d6;
-  --color-danger: #b3261e;
-  --color-ok: #166534;
+  --color-bg: #141517;
+  --color-surface: #1d1e21;
+  --color-raised: #26272b;
+  --color-border: #34363c;
+  --color-text: #e8e6e3;
+  --color-muted: #a1a1aa;
+  --color-accent: #8b95ff;
+  --color-danger: #ff7a70;
+  --color-ok: #34d399;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -30,7 +30,7 @@
 
 @layer base {
   html {
-    color-scheme: light;
+    color-scheme: dark;
   }
 
   body {

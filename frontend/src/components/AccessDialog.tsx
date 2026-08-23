@@ -80,7 +80,7 @@ export function AccessDialog({ docId, onClose }: { docId: string; onClose: () =>
                     aria-pressed={levels[candidate.id] === option.value}
                     className={`rounded-md border px-2 py-0.5 text-xs transition ${
                       levels[candidate.id] === option.value
-                        ? 'border-accent bg-accent text-white'
+                        ? 'border-accent bg-accent text-bg'
                         : 'text-muted hover:text-text border-border bg-raised'
                     }`}
                     onClick={() =>

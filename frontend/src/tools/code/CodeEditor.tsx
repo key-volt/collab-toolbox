@@ -2,7 +2,7 @@ import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
 import { defaultKeymap, indentWithTab } from '@codemirror/commands'
 import {
   bracketMatching,
-  defaultHighlightStyle,
+  HighlightStyle,
   indentOnInput,
   indentUnit,
   syntaxHighlighting,
@@ -17,6 +17,7 @@ import {
   keymap,
   lineNumbers,
 } from '@codemirror/view'
+import { tags as t } from '@lezer/highlight'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
@@ -160,6 +161,34 @@ function buildTree(entries: FileEntry[], extraFolders: string[]): TreeRow[] {
   return ordered
 }
 
+// CodeMirror's defaultHighlightStyle is designed for light backgrounds, so the dark
+// theme states every token color explicitly; each holds at least 4.5:1 on the editor bg.
+const codeHighlight = HighlightStyle.define([
+  { tag: [t.keyword, t.modifier, t.self], color: '#c792ea' },
+  { tag: [t.number, t.bool, t.null, t.atom, t.literal, t.escape, t.regexp], color: '#f2c97d' },
+  { tag: [t.string, t.special(t.string), t.attributeValue], color: '#a5d6a7' },
+  {
+    tag: [
+      t.function(t.variableName),
+      t.function(t.propertyName),
+      t.function(t.definition(t.variableName)),
+      t.function(t.definition(t.propertyName)),
+    ],
+    color: '#82b8ff',
+  },
+  { tag: [t.className, t.definition(t.className), t.typeName, t.namespace], color: '#7fdbca' },
+  { tag: [t.propertyName, t.attributeName], color: '#a8c7e0' },
+  { tag: t.comment, color: '#8b949e', fontStyle: 'italic' },
+  { tag: t.meta, color: '#8b949e' },
+  { tag: t.invalid, color: '#ff7a70' },
+  { tag: t.tagName, color: '#82b8ff' },
+  { tag: t.heading, color: '#82b8ff', fontWeight: 'bold' },
+  { tag: t.link, color: '#a8c7e0', textDecoration: 'underline' },
+  { tag: t.emphasis, fontStyle: 'italic' },
+  { tag: t.strong, fontWeight: 'bold' },
+  { tag: t.strikethrough, textDecoration: 'line-through' },
+])
+
 function editorTheme(): Extension {
   return EditorView.theme(
     {
@@ -170,12 +199,12 @@ function editorTheme(): Extension {
         color: 'var(--color-muted)',
         border: 'none',
       },
-      '.cm-activeLine': { backgroundColor: 'rgba(0,0,0,0.04)' },
-      '.cm-activeLineGutter': { backgroundColor: 'rgba(0,0,0,0.04)' },
+      '.cm-activeLine': { backgroundColor: 'rgba(255,255,255,0.05)' },
+      '.cm-activeLineGutter': { backgroundColor: 'rgba(255,255,255,0.05)' },
       '&.cm-focused': { outline: 'none' },
       '.cm-ySelectionInfo': { fontFamily: 'var(--font-sans)', padding: '1px 4px' },
     },
-    { dark: false },
+    { dark: true },
   )
 }
 
@@ -321,7 +350,7 @@ export function CodeEditor({ docId }: { docId: string }) {
             const typed = state as { codeFile?: string; user?: { color?: string } }
             if (typeof typed.codeFile !== 'string') continue
             const colors = perFile[typed.codeFile] ?? []
-            colors.push(typed.user?.color ?? '#6b6156')
+            colors.push(typed.user?.color ?? '#a1a1aa')
             perFile[typed.codeFile] = colors
           }
           setFilePresence(perFile)
@@ -389,7 +418,7 @@ export function CodeEditor({ docId }: { docId: string }) {
         indentOnInput(),
         bracketMatching(),
         closeBrackets(),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        syntaxHighlighting(codeHighlight),
         keymap.of([...yUndoManagerKeymap, ...closeBracketsKeymap, ...defaultKeymap, indentWithTab]),
         language.fourSpaceIndent === true ? indentUnit.of('    ') : [],
         language.extension,

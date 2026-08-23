@@ -8,7 +8,7 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'primary' | 'danger' }) {
   const palette =
     variant === 'primary'
-      ? 'bg-accent text-white hover:opacity-90'
+      ? 'bg-accent text-bg hover:opacity-90'
       : variant === 'danger'
         ? 'bg-raised text-danger border border-border hover:border-danger'
         : 'bg-raised text-text border border-border hover:bg-border/60'

@@ -542,7 +542,7 @@ export function PaintEditor({ docId }: { docId: string }) {
         )}
         <div ref={containerRef} className="min-h-0 flex-1">
           <Excalidraw
-            theme="light"
+            theme="dark"
             viewModeEnabled={!canMutate}
             excalidrawAPI={(apiInstance) => setExcalidrawAPI(apiInstance)}
             onPointerUpdate={(payload) => bindingRef.current?.onPointerUpdate(payload)}
