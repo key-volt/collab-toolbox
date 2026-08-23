@@ -142,6 +142,26 @@ const BOOT_PY = [
 let pyodide = null
 let pyconsole = null
 let reprShorten = null
+let awaitFut = null
+
+// Mirrored verbatim from Pyodide's own console page: a console future must never be
+// awaited directly — its proxy is consumed by the await, and reading formatted_error
+// afterwards explodes with "Object has already been destroyed". The Python wrapper is
+// what gets awaited; the future proxy stays readable and is destroyed explicitly.
+const AWAIT_FUT_PY = [
+  'import builtins',
+  'from pyodide.ffi import to_js',
+  '',
+  '',
+  'async def await_fut(fut):',
+  '    res = await fut',
+  '    if res is not None:',
+  '        builtins._ = res',
+  '    return to_js([res], depth=1)',
+  '',
+  '',
+  'await_fut',
+].join('\n')
 
 const boot = async () => {
   stage('loading the interpreter')
@@ -176,6 +196,7 @@ const boot = async () => {
   pyconsole = PyodideConsole(pyodide.globals)
   pyconsole.stdout_callback = (text) => stdout(text)
   pyconsole.stderr_callback = (text) => stderr(text)
+  awaitFut = pyodide.runPython(AWAIT_FUT_PY)
 
   stage('ready')
   send({ out: 'prompt', ps: 'primary' })
@@ -197,34 +218,38 @@ const flushGraphics = () => {
 
 const pushLine = async (line) => {
   const future = pyconsole.push(line)
+  if (future.syntax_check === 'incomplete') {
+    send({ out: 'prompt', ps: 'continuation' })
+    future.destroy()
+    return
+  }
+  if (future.syntax_check === 'syntax-error') {
+    stderr(`${future.formatted_error}\n`)
+    send({ out: 'prompt', ps: 'primary' })
+    future.destroy()
+    return
+  }
+  const wrapped = awaitFut(future)
   try {
-    if (future.syntax_check === 'incomplete') {
-      send({ out: 'prompt', ps: 'continuation' })
-      return
+    const [value] = await wrapped
+    if (value !== undefined) {
+      const shown = reprShorten.callKwargs(value, { separator: '\n<long output truncated>\n' })
+      send({ out: 'result', text: String(shown) })
     }
-    if (future.syntax_check === 'syntax-error') {
-      stderr(`${future.formatted_error}\n`)
-      send({ out: 'prompt', ps: 'primary' })
-      return
+    if (value instanceof pyodide.ffi.PyProxy) {
+      value.destroy()
     }
-    try {
-      const value = await future
-      if (value !== undefined) {
-        send({ out: 'result', text: String(reprShorten(value)) })
-        if (value !== null && typeof value.destroy === 'function') value.destroy()
-      }
-    } catch (cause) {
-      if (cause.constructor && cause.constructor.name === 'PythonError') {
-        stderr(`${future.formatted_error || cause.message}`)
-      } else {
-        stderr(`${String(cause)}\n`)
-      }
-    } finally {
-      flushGraphics()
-      send({ out: 'prompt', ps: 'primary' })
+  } catch (cause) {
+    if (cause.constructor && cause.constructor.name === 'PythonError') {
+      stderr(`${(future.formatted_error || cause.message).trimEnd()}\n`)
+    } else {
+      stderr(`${String(cause)}\n`)
     }
   } finally {
-    if (typeof future.destroy === 'function') future.destroy()
+    future.destroy()
+    wrapped.destroy()
+    flushGraphics()
+    send({ out: 'prompt', ps: 'primary' })
   }
 }
 
