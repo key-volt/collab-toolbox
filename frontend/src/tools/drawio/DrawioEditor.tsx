@@ -81,15 +81,23 @@ export function DrawioEditor({ docId }: { docId: string }) {
     )
     sessionRef.current = session
 
+    // Its own function on purpose: the cancellation flag is mutated from the cleanup
+    // closure, which TypeScript's narrowing cannot see — a second read in the same
+    // function after an earlier guard would be "provably" falsy to the linter. Here
+    // the post-await read is the function's first, so it keeps its honest type.
+    const applyStored = async () => {
+      const stored = await apiText(`/api/documents/${docId}/files/${FILENAME}`)
+      if (cancelled) return
+      xml2ydoc(stored, session.doc)
+    }
+
     async function seed() {
       const awareness = session.awareness
       if (awareness === null) return
       if (session.doc.getMap('mxfile').size > 0) return
       await new Promise((resolve) => setTimeout(resolve, 300))
       if (cancelled || session.doc.getMap('mxfile').size > 0 || !isElected(awareness)) return
-      const stored = await apiText(`/api/documents/${docId}/files/${FILENAME}`)
-      if (cancelled) return
-      xml2ydoc(stored, session.doc)
+      await applyStored()
     }
 
     async function readerProbe() {
@@ -100,13 +108,12 @@ export function DrawioEditor({ docId }: { docId: string }) {
       if (session.doc.getMap('mxfile').size === 0) setMode('static')
     }
 
-    let awareness: Awareness | null = null
+    // No initializer: both branches assign, so an initial null would be dead code.
+    let awareness: Awareness | null
     if (mode === 'static') {
       awareness = new Awareness(session.doc)
       staticAwarenessRef.current = awareness
-      void apiText(`/api/documents/${docId}/files/${FILENAME}`).then((stored) => {
-        if (!cancelled) xml2ydoc(stored, session.doc)
-      })
+      void applyStored()
     } else {
       session.connect()
       awareness = session.awareness
