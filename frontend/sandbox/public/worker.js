@@ -40,11 +40,10 @@ const BOOT_PY = [
   '',
   'class _SandboxBlockedFinder(importlib.abc.MetaPathFinder):',
   '    blocked = {',
-  '        "tkinter": (',
-  '            "tkinter cannot run in a browser - this sandbox offers turtle and"',
-  '            " matplotlib for graphics instead"',
+  '        "_tkinter": (',
+  '            "the sandbox tkinter is a pure-Python emulation - _tkinter does"',
+  '            " not exist here"',
   '        ),',
-  '        "_tkinter": "tkinter cannot run in a browser",',
   '    }',
   '',
   '    def find_spec(self, fullname, path=None, target=None):',
@@ -95,6 +94,11 @@ const BOOT_PY = [
   '            scene = sys.modules["turtle"].Screen().show_scene()',
   '            if scene is not None:',
   '                _sandbox_bridge.emit_svg(json.dumps(scene))',
+  '        except Exception:',
+  '            pass',
+  '    if "tkinter" in sys.modules:',
+  '        try:',
+  '            sys.modules["tkinter"]._flush()',
   '        except Exception:',
   '            pass',
   '',
@@ -179,6 +183,7 @@ const boot = async () => {
   pyodide.registerJsModule('_sandbox_bridge', {
     emit_png: (data) => send({ out: 'png', data }),
     emit_svg: (data) => send({ out: 'svg', data }),
+    emit_tk: (data) => send({ out: 'tk', data }),
   })
   pyodide.runPython(BOOT_PY)
 
@@ -198,6 +203,27 @@ const boot = async () => {
       '    _sandbox_block_module("turtle", "turtle is not bundled in this deployment")',
     ].join('\n'),
   )
+
+  // The tkinter emulation is our own pure-Python module, served beside the turtle
+  // wheel and written into the interpreter's path. A deployment missing the file
+  // degrades to a clear message, never a bare ImportError.
+  try {
+    const shimResponse = await fetch(`${BASE}vendor/tkinter.py`)
+    if (!shimResponse.ok) throw new Error(`HTTP ${String(shimResponse.status)}`)
+    pyodide.FS.mkdirTree('/sandbox_lib')
+    pyodide.FS.writeFile('/sandbox_lib/tkinter.py', await shimResponse.text())
+    pyodide.runPython(
+      [
+        'import sys',
+        'if "/sandbox_lib" not in sys.path:',
+        '    sys.path.insert(1, "/sandbox_lib")',
+      ].join('\n'),
+    )
+  } catch {
+    pyodide.runPython(
+      '_sandbox_block_module("tkinter", "the tkinter emulation is not bundled in this deployment")',
+    )
+  }
 
   const consoleModule = pyodide.pyimport('pyodide.console')
   const PyodideConsole = consoleModule.PyodideConsole
@@ -223,6 +249,19 @@ const writeFiles = (files) => {
 
 const flushGraphics = () => {
   pyodide.runPython('_sandbox_flush()')
+}
+
+// A DOM event from the rendered GUI: hand it to the emulation's dispatcher, which
+// runs the Python callback and flushes whatever it changed.
+const dispatchTkEvent = (event) => {
+  pyodide.globals.set('_sandbox_tk_io', JSON.stringify(event))
+  pyodide.runPython(
+    [
+      'import sys',
+      'if "tkinter" in sys.modules:',
+      '    sys.modules["tkinter"]._dispatch_event(_sandbox_tk_io)',
+    ].join('\n'),
+  )
 }
 
 const pushLine = async (line) => {
@@ -301,6 +340,8 @@ const handle = async (command) => {
     await pushLine(command.line)
   } else if (command.cmd === 'run') {
     await runFile(command.path, command.files)
+  } else if (command.cmd === 'tk-event') {
+    dispatchTkEvent(command.event)
   }
 }
 

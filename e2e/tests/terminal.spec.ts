@@ -41,7 +41,7 @@ async function pushLine(page: Page, line: string): Promise<void> {
   await sandboxFrame(page).evaluate((entered) => window.__termDebug?.push(entered), line)
 }
 
-test('terminal: boots isolated, runs Python and plots, blocks tkinter, and stops', async ({
+test('terminal: boots isolated, runs Python and plots, drives tkinter, and stops', async ({
   page,
   request,
 }) => {
@@ -50,8 +50,9 @@ test('terminal: boots isolated, runs Python and plots, blocks tkinter, and stops
   captureBrowserErrors(page, 'terminal')
   const docId = await createDocument(request, 'code', uniqueName('Sandbox'))
 
-  // A two-file project, pushed straight through the snapshot API so Run can prove
-  // that sibling imports work against the copied tree.
+  // A project pushed straight through the snapshot API: Run on main.py proves
+  // sibling imports against the copied tree, and gui.py proves the tkinter
+  // emulation end to end.
   const token = await adminToken(request)
   const pushed = await request.post(`/api/tools/code/${docId}/snapshot`, {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -59,6 +60,14 @@ test('terminal: boots isolated, runs Python and plots, blocks tkinter, and stops
       files: [
         { path: 'main.py', text: 'import util\nprint("sum is", util.add(2, 3))\n' },
         { path: 'util.py', text: 'def add(a, b):\n    return a + b\n' },
+        {
+          path: 'gui.py',
+          text:
+            'import tkinter as tk\n\nroot = tk.Tk()\nroot.title("Counter")\n' +
+            'value = tk.IntVar()\ntk.Label(root, textvariable=value).pack()\n' +
+            'tk.Button(root, text="inc", command=lambda: value.set(value.get() + 1)).pack()\n' +
+            'root.mainloop()\nprint("gui ready")\n',
+        },
       ],
     },
   })
@@ -121,9 +130,23 @@ test('terminal: boots isolated, runs Python and plots, blocks tkinter, and stops
     )
     .toBeGreaterThan(0)
 
-  // tkinter is impossible in a browser; the message says so and names the substitutes.
-  await pushLine(page, 'import tkinter')
-  await expect.poll(() => termText(page), { timeout: 60_000 }).toContain('cannot run in a browser')
+  // tkinter runs as the bundled pure-Python emulation: the app renders in the
+  // panel, mainloop() returns (the run finishes), and the button still drives
+  // the Python callback which updates the label through the variable.
+  await page.evaluate(() => {
+    const withDebug = window as unknown as {
+      __codeDebug?: { setActiveFile: (path: string) => void }
+    }
+    withDebug.__codeDebug?.setActiveFile('gui.py')
+  })
+  await expect(page.getByRole('button', { name: /Run gui\.py/ })).toBeEnabled()
+  await page.getByRole('button', { name: /Run gui\.py/ }).click()
+  await expect.poll(() => termText(page), { timeout: 120_000 }).toContain('gui ready')
+  const guiWindow = sandboxFrame(page).locator('[data-tk-kind="window"]')
+  await expect(guiWindow).toBeVisible()
+  await expect(guiWindow.locator('[data-tk-kind="label"]')).toHaveText('0')
+  await guiWindow.locator('[data-tk-kind="button"]').click()
+  await expect(guiWindow.locator('[data-tk-kind="label"]')).toHaveText('1')
 
   // The turtle wheel ships in the image. A deployment built without it degrades to a
   // "not bundled" message — which is exactly what this assertion turns red.
