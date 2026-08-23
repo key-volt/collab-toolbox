@@ -1034,6 +1034,7 @@ class Listbox(Widget):
         index = int(data.get("index", -1))
         if 0 <= index < len(self._items):
             self._selection = [index]
+            self._push_config(self._config_extra())
             self._fire_binding("<<ListboxSelect>>", self._make_event(data))
 
 

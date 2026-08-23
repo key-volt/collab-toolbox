@@ -41,6 +41,17 @@ async function pushLine(page: Page, line: string): Promise<void> {
   await sandboxFrame(page).evaluate((entered) => window.__termDebug?.push(entered), line)
 }
 
+// The initial selection is alphabetical over the tree, so an assertion about the
+// Run button must pick its file explicitly, never inherit whatever sorts first.
+async function setActiveFile(page: Page, path: string): Promise<void> {
+  await page.evaluate((wanted) => {
+    const withDebug = window as unknown as {
+      __codeDebug?: { setActiveFile: (target: string) => void }
+    }
+    withDebug.__codeDebug?.setActiveFile(wanted)
+  }, path)
+}
+
 test('terminal: boots isolated, runs Python and plots, drives tkinter, and stops', async ({
   page,
   request,
@@ -113,7 +124,8 @@ test('terminal: boots isolated, runs Python and plots, drives tkinter, and stops
   await pushLine(page, 'print(21 * 2)')
   await expect.poll(() => termText(page), { timeout: 60_000 }).toContain('42')
 
-  // Run executes the open file against the project tree, sibling import included.
+  // Run executes the chosen file against the project tree, sibling import included.
+  await setActiveFile(page, 'main.py')
   await expect(page.getByRole('button', { name: /Run main\.py/ })).toBeEnabled()
   await page.getByRole('button', { name: /Run main\.py/ }).click()
   await expect.poll(() => termText(page), { timeout: 120_000 }).toContain('sum is 5')
@@ -133,12 +145,7 @@ test('terminal: boots isolated, runs Python and plots, drives tkinter, and stops
   // tkinter runs as the bundled pure-Python emulation: the app renders in the
   // panel, mainloop() returns (the run finishes), and the button still drives
   // the Python callback which updates the label through the variable.
-  await page.evaluate(() => {
-    const withDebug = window as unknown as {
-      __codeDebug?: { setActiveFile: (path: string) => void }
-    }
-    withDebug.__codeDebug?.setActiveFile('gui.py')
-  })
+  await setActiveFile(page, 'gui.py')
   await expect(page.getByRole('button', { name: /Run gui\.py/ })).toBeEnabled()
   await page.getByRole('button', { name: /Run gui\.py/ }).click()
   await expect.poll(() => termText(page), { timeout: 120_000 }).toContain('gui ready')

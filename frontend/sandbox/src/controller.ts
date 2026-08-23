@@ -428,8 +428,8 @@ function styleControl(el: HTMLElement): void {
 
 function buildTkWindow(wid: number, title: string): void {
   const card = document.createElement('div')
-  card.dataset['tkId'] = String(wid)
-  card.dataset['tkKind'] = 'window'
+  card.dataset.tkId = String(wid)
+  card.dataset.tkKind = 'window'
   card.tabIndex = 0
   card.style.border = `1px solid ${TK_COLORS.border}`
   card.style.borderRadius = '8px'
@@ -449,7 +449,7 @@ function buildTkWindow(wid: number, title: string): void {
   titleBar.style.background = TK_COLORS.raised
   titleBar.style.borderBottom = `1px solid ${TK_COLORS.border}`
   const titleText = document.createElement('span')
-  titleText.dataset['tkTitle'] = ''
+  titleText.dataset.tkTitle = ''
   titleText.textContent = title
   const closeButton = document.createElement('button')
   closeButton.type = 'button'
@@ -499,9 +499,9 @@ function buildTkWidget(wid: number, kind: string, opts: Record<string, unknown>)
   }
   if (kind === 'entry') {
     const el = document.createElement('input')
-    el.type = tkStr(opts['show'], '') === '' ? 'text' : 'password'
+    el.type = tkStr(opts.show, '') === '' ? 'text' : 'password'
     styleControl(el)
-    el.style.width = `${String(tkNum(opts['width'], 20))}ch`
+    el.style.width = `${String(tkNum(opts.width, 20))}ch`
     el.addEventListener('input', () => {
       sendTkEvent({ wid, event: 'var', value: el.value })
     })
@@ -511,8 +511,8 @@ function buildTkWidget(wid: number, kind: string, opts: Record<string, unknown>)
     const el = document.createElement('textarea')
     styleControl(el)
     el.style.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace'
-    el.cols = tkNum(opts['width'], 40)
-    el.rows = tkNum(opts['height'], 8)
+    el.cols = tkNum(opts.width, 40)
+    el.rows = tkNum(opts.height, 8)
     el.addEventListener('input', () => {
       sendTkEvent({ wid, event: 'var', value: el.value })
     })
@@ -553,8 +553,8 @@ function buildTkWidget(wid: number, kind: string, opts: Record<string, unknown>)
     styleControl(el)
     el.style.padding = '0'
     el.style.overflowY = 'auto'
-    el.style.minWidth = `${String(tkNum(opts['width'], 20))}ch`
-    el.style.height = `${String(tkNum(opts['height'], 10) * 1.4)}em`
+    el.style.minWidth = `${String(tkNum(opts.width, 20))}ch`
+    el.style.height = `${String(tkNum(opts.height, 10) * 1.4)}em`
     return makeRec(kind, el, {})
   }
   if (kind === 'scale') {
@@ -571,10 +571,10 @@ function buildTkWidget(wid: number, kind: string, opts: Record<string, unknown>)
     const input = document.createElement('input')
     input.type = 'range'
     input.style.accentColor = TK_COLORS.accent
-    input.min = String(tkNum(opts['from_'], 0))
-    input.max = String(tkNum(opts['to'], 100))
-    input.step = String(tkNum(opts['resolution'], 1))
-    if (tkStr(opts['orient'], 'horizontal') === 'vertical') {
+    input.min = String(tkNum(opts.from_, 0))
+    input.max = String(tkNum(opts.to, 100))
+    input.step = String(tkNum(opts.resolution, 1))
+    if (tkStr(opts.orient, 'horizontal') === 'vertical') {
       input.style.writingMode = 'vertical-lr'
       input.style.height = '100px'
     } else {
@@ -582,7 +582,7 @@ function buildTkWidget(wid: number, kind: string, opts: Record<string, unknown>)
     }
     const readout = document.createElement('span')
     readout.style.color = TK_COLORS.muted
-    if (tkNum(opts['showvalue'], 1) === 0) readout.style.display = 'none'
+    if (tkNum(opts.showvalue, 1) === 0) readout.style.display = 'none'
     input.addEventListener('input', () => {
       readout.textContent = input.value
       sendTkEvent({ wid, event: 'command', value: Number(input.value) })
@@ -619,17 +619,17 @@ function rebuildListbox(wid: number, rec: TkWidget, items: string[], selection: 
 }
 
 function updateTkWidget(wid: number, rec: TkWidget, opts: Record<string, unknown>): void {
-  const text = opts['text']
+  const text = opts.text
   if (typeof text === 'string' && rec.textEl !== null) rec.textEl.textContent = text
-  const fg = opts['fg']
+  const fg = opts.fg
   if (typeof fg === 'string') rec.el.style.color = fg
-  const bg = opts['bg']
+  const bg = opts.bg
   if (typeof bg === 'string') (rec.kind === 'window' ? rec.body : rec.el).style.background = bg
-  const font = cssFont(opts['font'])
+  const font = cssFont(opts.font)
   if (font !== null) rec.el.style.font = font
-  const justify = opts['justify']
+  const justify = opts.justify
   if (typeof justify === 'string') rec.el.style.textAlign = justify
-  const state = opts['state']
+  const state = opts.state
   if (typeof state === 'string') {
     const target = rec.input ?? rec.el
     if (
@@ -642,53 +642,53 @@ function updateTkWidget(wid: number, rec: TkWidget, opts: Record<string, unknown
     rec.el.style.opacity = state === 'disabled' ? '0.55' : ''
   }
   if (rec.kind === 'window') {
-    const width = opts['width']
+    const width = opts.width
     if (typeof width === 'number') rec.body.style.width = `${String(width)}px`
-    const height = opts['height']
+    const height = opts.height
     if (typeof height === 'number') rec.body.style.minHeight = `${String(height)}px`
   }
   if (rec.kind === 'entry') {
-    const show = opts['show']
+    const show = opts.show
     if (typeof show === 'string' && rec.input instanceof HTMLInputElement) {
       rec.input.type = show === '' ? 'text' : 'password'
     }
   }
   if (rec.kind === 'text') {
-    const wrap = opts['wrap']
+    const wrap = opts.wrap
     if (typeof wrap === 'string' && rec.input !== null) {
       rec.input.style.whiteSpace = wrap === 'none' ? 'pre' : 'pre-wrap'
     }
   }
-  const value = opts['value']
+  const value = opts.value
   if ((typeof value === 'string' || typeof value === 'number') && rec.input !== null) {
     const wanted = String(value)
     // Same-value writes are skipped so an echo from Python never fights the caret.
     if (rec.input.value !== wanted) rec.input.value = wanted
     if (rec.valueLabel !== null) rec.valueLabel.textContent = wanted
   }
-  const checked = opts['checked']
+  const checked = opts.checked
   if (typeof checked === 'boolean' && rec.input instanceof HTMLInputElement) {
     rec.input.checked = checked
   }
-  const group = opts['group']
+  const group = opts.group
   if (typeof group === 'number' && rec.input instanceof HTMLInputElement) {
     rec.input.name = `tkg${String(group)}`
   }
   if (rec.kind === 'scale') {
     if (rec.input instanceof HTMLInputElement) {
-      const from = opts['from_']
+      const from = opts.from_
       if (typeof from === 'number') rec.input.min = String(from)
-      const to = opts['to']
+      const to = opts.to
       if (typeof to === 'number') rec.input.max = String(to)
-      const resolution = opts['resolution']
+      const resolution = opts.resolution
       if (typeof resolution === 'number') rec.input.step = String(resolution)
     }
-    const label = opts['label']
+    const label = opts.label
     if (typeof label === 'string' && rec.textEl !== null) rec.textEl.textContent = label
   }
   if (rec.kind === 'listbox') {
-    const items = opts['items']
-    const selection = opts['selection']
+    const items = opts.items
+    const selection = opts.selection
     if (Array.isArray(items)) {
       rebuildListbox(
         wid,
@@ -720,21 +720,21 @@ function layoutTkWidget(rec: TkWidget, parent: TkWidget, manager: string, opts: 
   if (manager === 'pack') {
     if (body.style.display !== 'flex') {
       body.style.display = 'flex'
-      const side = tkStr(opts['side'], 'top')
+      const side = tkStr(opts.side, 'top')
       body.style.flexDirection = side === 'left' || side === 'right' ? 'row' : 'column'
       body.style.alignItems = 'flex-start'
       body.style.gap = '4px'
     }
-    const padx = tkNum(opts['padx'], 0)
-    const pady = tkNum(opts['pady'], 0)
+    const padx = tkNum(opts.padx, 0)
+    const pady = tkNum(opts.pady, 0)
     if (padx !== 0 || pady !== 0) el.style.margin = `${String(pady)}px ${String(padx)}px`
     // The side margins come after the shorthand so "bottom"/"right" survive it.
-    const side = tkStr(opts['side'], 'top')
+    const side = tkStr(opts.side, 'top')
     if (side === 'bottom') el.style.marginTop = 'auto'
     if (side === 'right') el.style.marginLeft = 'auto'
-    const fill = tkStr(opts['fill'], 'none')
+    const fill = tkStr(opts.fill, 'none')
     if (fill !== 'none') el.style.alignSelf = 'stretch'
-    if (tkNum(opts['expand'], 0) !== 0) el.style.flexGrow = '1'
+    if (tkNum(opts.expand, 0) !== 0) el.style.flexGrow = '1'
     body.appendChild(el)
     return
   }
@@ -747,30 +747,30 @@ function layoutTkWidget(rec: TkWidget, parent: TkWidget, manager: string, opts: 
     }
     applyTkTracks(parent, 'row')
     applyTkTracks(parent, 'column')
-    const givenRow = opts['row']
+    const givenRow = opts.row
     const row = typeof givenRow === 'number' ? givenRow : parent.nextRow
     parent.nextRow = Math.max(parent.nextRow, row + 1)
-    const column = tkNum(opts['column'], 0)
-    el.style.gridRow = `${String(row + 1)} / span ${String(tkNum(opts['rowspan'], 1))}`
-    el.style.gridColumn = `${String(column + 1)} / span ${String(tkNum(opts['columnspan'], 1))}`
-    const sticky = tkStr(opts['sticky'], '')
+    const column = tkNum(opts.column, 0)
+    el.style.gridRow = `${String(row + 1)} / span ${String(tkNum(opts.rowspan, 1))}`
+    el.style.gridColumn = `${String(column + 1)} / span ${String(tkNum(opts.columnspan, 1))}`
+    const sticky = tkStr(opts.sticky, '')
     if (sticky.includes('e') && sticky.includes('w')) el.style.justifySelf = 'stretch'
     else if (sticky.includes('e')) el.style.justifySelf = 'end'
     else if (sticky.includes('w')) el.style.justifySelf = 'start'
     if (sticky.includes('n') && sticky.includes('s')) el.style.alignSelf = 'stretch'
-    const padx = tkNum(opts['padx'], 0)
-    const pady = tkNum(opts['pady'], 0)
+    const padx = tkNum(opts.padx, 0)
+    const pady = tkNum(opts.pady, 0)
     if (padx !== 0 || pady !== 0) el.style.margin = `${String(pady)}px ${String(padx)}px`
     body.appendChild(el)
     return
   }
   body.style.position = 'relative'
   el.style.position = 'absolute'
-  el.style.left = `${String(tkNum(opts['x'], 0))}px`
-  el.style.top = `${String(tkNum(opts['y'], 0))}px`
-  const width = opts['width']
+  el.style.left = `${String(tkNum(opts.x, 0))}px`
+  el.style.top = `${String(tkNum(opts.y, 0))}px`
+  const width = opts.width
   if (typeof width === 'number') el.style.width = `${String(width)}px`
-  const height = opts['height']
+  const height = opts.height
   if (typeof height === 'number') el.style.height = `${String(height)}px`
   body.appendChild(el)
 }
@@ -892,7 +892,7 @@ function buildTkCanvasItem(item: TkCanvasItem): SVGElement | null {
     el.setAttribute('points', points.join(' '))
     el.setAttribute('fill', 'none')
     el.setAttribute('stroke', stroke('fill', '#000000'))
-    el.setAttribute('stroke-width', String(tkNum(opts['width'], 1)))
+    el.setAttribute('stroke-width', String(tkNum(opts.width, 1)))
     return el
   }
   if ((item.type === 'rectangle' || item.type === 'oval') && coords.length >= 4) {
@@ -917,7 +917,7 @@ function buildTkCanvasItem(item: TkCanvasItem): SVGElement | null {
     }
     el.setAttribute('fill', stroke('fill', 'none'))
     el.setAttribute('stroke', stroke('outline', '#000000'))
-    el.setAttribute('stroke-width', String(tkNum(opts['width'], 1)))
+    el.setAttribute('stroke-width', String(tkNum(opts.width, 1)))
     return el
   }
   if (item.type === 'polygon' && coords.length >= 6) {
@@ -937,8 +937,8 @@ function buildTkCanvasItem(item: TkCanvasItem): SVGElement | null {
     const cy = (y1 + y2) / 2
     const rx = Math.abs(x2 - x1) / 2
     const ry = Math.abs(y2 - y1) / 2
-    const start = (tkNum(opts['start'], 0) * Math.PI) / 180
-    const extent = (tkNum(opts['extent'], 90) * Math.PI) / 180
+    const start = (tkNum(opts.start, 0) * Math.PI) / 180
+    const extent = (tkNum(opts.extent, 90) * Math.PI) / 180
     const startPoint = [cx + rx * Math.cos(start), cy - ry * Math.sin(start)]
     const endPoint = [cx + rx * Math.cos(start + extent), cy - ry * Math.sin(start + extent)]
     const large = Math.abs(extent) > Math.PI ? 1 : 0
@@ -946,7 +946,7 @@ function buildTkCanvasItem(item: TkCanvasItem): SVGElement | null {
       `A ${String(rx)} ${String(ry)} 0 ${String(large)} 0` +
       ` ${String(endPoint[0])} ${String(endPoint[1])}`
     const el = document.createElementNS(SVG_NS, 'path')
-    if (tkStr(opts['style'], 'pieslice') === 'arc') {
+    if (tkStr(opts.style, 'pieslice') === 'arc') {
       el.setAttribute(
         'd',
         `M ${String(startPoint[0])} ${String(startPoint[1])} ${arcPath}`,
@@ -960,7 +960,7 @@ function buildTkCanvasItem(item: TkCanvasItem): SVGElement | null {
       el.setAttribute('fill', stroke('fill', 'none'))
     }
     el.setAttribute('stroke', stroke('outline', '#000000'))
-    el.setAttribute('stroke-width', String(tkNum(opts['width'], 1)))
+    el.setAttribute('stroke-width', String(tkNum(opts.width, 1)))
     return el
   }
   if (item.type === 'text' && coords.length >= 2) {
@@ -968,12 +968,12 @@ function buildTkCanvasItem(item: TkCanvasItem): SVGElement | null {
     el.setAttribute('x', String(coords[0]))
     el.setAttribute('y', String(coords[1]))
     el.setAttribute('fill', stroke('fill', '#000000'))
-    const anchor = tkStr(opts['anchor'], 'center')
+    const anchor = tkStr(opts.anchor, 'center')
     el.setAttribute('text-anchor', anchor.includes('w') ? 'start' : anchor.includes('e') ? 'end' : 'middle')
     el.setAttribute('dominant-baseline', anchor.includes('n') ? 'hanging' : anchor.includes('s') ? 'auto' : 'middle')
-    const font = cssFont(opts['font'])
+    const font = cssFont(opts.font)
     el.style.font = font ?? '13px sans-serif'
-    el.textContent = tkStr(opts['text'], '')
+    el.textContent = tkStr(opts.text, '')
     return el
   }
   return null
@@ -1020,8 +1020,8 @@ function applyTkOp(op: TkOp): void {
     if (parent === undefined || rec !== undefined) return
     const built = buildTkWidget(wid, op.kind ?? '', op.opts ?? {})
     if (built === null) return
-    built.el.dataset['tkId'] = String(wid)
-    built.el.dataset['tkKind'] = op.kind ?? ''
+    built.el.dataset.tkId = String(wid)
+    built.el.dataset.tkKind = op.kind ?? ''
     tkWidgets.set(wid, built)
     updateTkWidget(wid, built, op.opts ?? {})
     return
@@ -1061,7 +1061,7 @@ function applyTkOp(op: TkOp): void {
 const tkParents = new Map<number, number>()
 
 function findTkParent(rec: TkWidget): TkWidget | undefined {
-  const parentId = tkParents.get(Number(rec.el.dataset['tkId'] ?? '-1'))
+  const parentId = tkParents.get(Number(rec.el.dataset.tkId ?? '-1'))
   return parentId === undefined ? undefined : tkWidgets.get(parentId)
 }
 
