@@ -24,7 +24,8 @@ export interface LanguageSpec {
   runnable?: 'python' | 'javascript'
 }
 
-const BY_EXTENSION: Record<string, () => LanguageSpec> = {
+// Partial: indexing by an arbitrary extension really can miss, and the type says so.
+const BY_EXTENSION: Partial<Record<string, () => LanguageSpec>> = {
   py: () => ({
     name: 'Python',
     extension: python(),

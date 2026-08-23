@@ -103,7 +103,8 @@ function healPathConflicts(doc: Y.Doc): void {
 function buildSnapshotBody(doc: Y.Doc): string {
   const files = listFiles(doc).map((entry) => ({
     path: entry.path,
-    text: filesOf(doc).get(entry.id)?.toString() ?? '',
+    // toJSON is Y.Text's typed accessor for the plain string content.
+    text: filesOf(doc).get(entry.id)?.toJSON() ?? '',
   }))
   const filePaths = new Set(files.map((entry) => entry.path))
   const folders = [...new Set(foldersOf(doc).toArray())].filter(
@@ -321,6 +322,7 @@ export function CodeEditor({ docId }: { docId: string }) {
   // matters — unrelated tree changes must not rebuild the view mid-typing.
   const activeExists = entries.some((entry) => entry.id === activeFileId)
   const activePath = entries.find((entry) => entry.id === activeFileId)?.path ?? null
+  const activeIsPython = activePath?.endsWith('.py') === true
   useEffect(() => {
     const session = sessionRef.current
     const host = editorHostRef.current
@@ -339,7 +341,7 @@ export function CodeEditor({ docId }: { docId: string }) {
 
     const language = languageFor(path)
     const state = EditorState.create({
-      doc: text.toString(),
+      doc: text.toJSON(),
       extensions: [
         lineNumbers(),
         highlightActiveLineGutter(),
@@ -373,7 +375,7 @@ export function CodeEditor({ docId }: { docId: string }) {
       },
       docText: (wanted: string) => {
         const entry = listFiles(session.doc).find((candidate) => candidate.path === wanted)
-        return entry === undefined ? null : filesOf(session.doc).get(entry.id)?.toString()
+        return entry === undefined ? null : filesOf(session.doc).get(entry.id)?.toJSON()
       },
       editorText: () => view.state.doc.toString(),
       lintCount: () => {
@@ -482,7 +484,7 @@ export function CodeEditor({ docId }: { docId: string }) {
 
   const formatActiveFile = () => {
     const view = viewRef.current
-    if (view === null || activePath === null || !activePath.endsWith('.py')) return
+    if (view === null || !activeIsPython) return
     const before = view.state.doc.toString()
     void formatPython(before).then((formatted) => {
       const current = viewRef.current
@@ -497,7 +499,7 @@ export function CodeEditor({ docId }: { docId: string }) {
     if (session === null) return []
     return listFiles(session.doc).map((entry) => ({
       path: entry.path,
-      text: filesOf(session.doc).get(entry.id)?.toString() ?? '',
+      text: filesOf(session.doc).get(entry.id)?.toJSON() ?? '',
     }))
   }, [])
 
@@ -627,9 +629,7 @@ export function CodeEditor({ docId }: { docId: string }) {
           </span>
           <div className="ml-auto flex items-center gap-3">
             <SaveState connected={connected} lastSavedAt={savedAt} />
-            {activePath !== null && activePath.endsWith('.py') && (
-              <Button onClick={formatActiveFile}>Format</Button>
-            )}
+            {activeIsPython && <Button onClick={formatActiveFile}>Format</Button>}
             <Button onClick={() => setTerminalOpen((open) => !open)}>Terminal</Button>
             <Button onClick={() => setHistoryOpen((open) => !open)}>History</Button>
           </div>

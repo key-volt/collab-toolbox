@@ -19,7 +19,8 @@ interface FrameMessage {
   detail?: unknown
 }
 
-const FRAME_SRC = '/sandbox/run.html'
+// The sandbox build emits index.html, served at the directory URL.
+const FRAME_SRC = '/sandbox/'
 
 export function SandboxPanel({
   getFiles,
@@ -89,7 +90,8 @@ export function SandboxPanel({
         </span>
         <div className="ml-auto flex items-center gap-2">
           <Button disabled={!runnable} onClick={run}>
-            Run {runnable && activePath !== null ? baseName(activePath) : ''}
+            {/* `runnable` already proves activePath is non-null (aliased narrowing). */}
+            Run {runnable ? baseName(activePath) : ''}
           </Button>
           <Button onClick={stop}>Stop</Button>
           <Button onClick={reset}>Reset</Button>

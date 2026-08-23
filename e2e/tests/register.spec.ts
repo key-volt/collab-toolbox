@@ -20,9 +20,14 @@ test('a visitor registers through the captcha, waits, and enters once approved',
   await page.getByLabel(/Password/).fill('a-long-password')
 
   // The proof-of-work widget: arm it, let it solve, and the submit button unlocks.
+  // The checkbox input sits under a decorative checkmark svg that intercepts clicks,
+  // so the click goes to its associated label — the same element a person clicks.
   const widget = page.locator('altcha-widget')
   await widget.waitFor()
-  await widget.locator('input[type="checkbox"]').click()
+  const checkbox = widget.locator('input[type="checkbox"]')
+  await checkbox.waitFor()
+  const checkboxId = await checkbox.getAttribute('id')
+  await widget.locator(`label[for="${checkboxId ?? ''}"]`).click()
   const submit = page.getByRole('button', { name: /Register|Waiting/ })
   await expect(submit).toBeEnabled({ timeout: 60_000 })
   await submit.click()

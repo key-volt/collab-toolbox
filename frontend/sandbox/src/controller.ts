@@ -153,12 +153,12 @@ function handleEngineMessage(message: EngineMessage): void {
 
 function startWorkerEngine(): Engine | null {
   try {
-    const base = new URL('.', window.location.href).href
-    const bootstrap = `self.__SANDBOX_BASE=${JSON.stringify(base)};importScripts(${JSON.stringify(
-      new URL('worker.js', base).href,
-    )});`
+    // An opaque origin cannot start a URL worker, so the worker is a blob module that
+    // imports the engine. It must be a MODULE worker: this Pyodide generation is ESM
+    // (pyodide.asm.mjs) and no longer supports classic workers at all.
+    const bootstrap = `import ${JSON.stringify(new URL('worker.js', window.location.href).href)};`
     const blobUrl = URL.createObjectURL(new Blob([bootstrap], { type: 'text/javascript' }))
-    const worker = new Worker(blobUrl)
+    const worker = new Worker(blobUrl, { type: 'module' })
     worker.onmessage = (event: MessageEvent<EngineMessage>) => handleEngineMessage(event.data)
     worker.onerror = (event: ErrorEvent) => {
       setStage('failed', event.message)
@@ -183,23 +183,19 @@ function startWorkerEngine(): Engine | null {
 }
 
 function startPageEngine(): Engine {
-  // No blob workers here: run the engine on this page's thread. The engine script is
-  // written to work in both contexts; Stop becomes a reload of the frame.
+  // No blob module workers here: run the same engine module on this page's thread.
+  // Stop then becomes a reload of the frame.
   const globals = window as unknown as {
-    __SANDBOX_BASE?: string
     __sandboxEngineReceive?: (message: EngineMessage) => void
     __sandboxEngineSend?: (command: EngineCommand) => void
   }
-  globals.__SANDBOX_BASE = new URL('.', window.location.href).href
   globals.__sandboxEngineReceive = handleEngineMessage
   const queued: EngineCommand[] = []
-  const script = document.createElement('script')
-  script.src = new URL('worker.js', window.location.href).href
-  script.onload = () => {
-    for (const command of queued.splice(0)) globals.__sandboxEngineSend?.(command)
-  }
-  script.onerror = () => setStage('failed', 'engine script did not load')
-  document.head.appendChild(script)
+  import(/* @vite-ignore */ new URL('worker.js', window.location.href).href)
+    .then(() => {
+      for (const command of queued.splice(0)) globals.__sandboxEngineSend?.(command)
+    })
+    .catch(() => setStage('failed', 'engine module did not load'))
   return {
     send: (command) => {
       if (globals.__sandboxEngineSend === undefined) queued.push(command)

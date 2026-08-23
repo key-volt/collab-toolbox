@@ -64,9 +64,7 @@ def modified_at(settings: Settings, dir_name: str) -> str | None:
     return datetime.fromtimestamp(newest, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def sync_tree(
-    settings: Settings, dir_name: str, keep_files: set[str], folders: set[str]
-) -> None:
+def sync_tree(settings: Settings, dir_name: str, keep_files: set[str], folders: set[str]) -> None:
     """Make the directory tree match a complete snapshot manifest.
 
     Files the manifest no longer names are deleted (their version history stays),
