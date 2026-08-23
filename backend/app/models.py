@@ -57,6 +57,25 @@ class Document(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     dir_name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     created_at: Mapped[str] = mapped_column(String, nullable=False, default=now_iso)
+    # NULL means no owner: only administrators manage such a document. Deleting an
+    # owner account therefore hands their documents to the administrators.
+    owner_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class DocumentAccess(Base):
+    """One grant per user per document. Level 'edit' includes reading."""
+
+    __tablename__ = "document_access"
+
+    document_id: Mapped[str] = mapped_column(
+        String, ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    level: Mapped[str] = mapped_column(String, nullable=False)
 
 
 class Page(Base):

@@ -23,13 +23,16 @@ function formatSize(size: number): string {
 }
 
 // Restore writes a new version rather than replacing anything, so this panel is safe
-// to explore — the copy says so on its face.
+// to explore — the copy says so on its face. Read-only visitors browse and preview;
+// the restore button itself needs edit access.
 export function HistoryPanel({
   docId,
+  canRestore = true,
   onClose,
   onRestore,
 }: {
   docId: string
+  canRestore?: boolean
   onClose: () => void
   onRestore: (filename: string, content: string) => Promise<void> | void
 }) {
@@ -116,9 +119,16 @@ export function HistoryPanel({
           <pre className="text-muted max-h-32 overflow-auto rounded-md bg-bg p-2 text-[10px]">
             {preview === null ? 'loading…' : preview.slice(0, 2000)}
           </pre>
-          <Button variant="primary" className="w-full" disabled={busy || preview === null} onClick={() => void restore()}>
-            {busy ? 'Restoring…' : 'Restore this version'}
-          </Button>
+          {canRestore && (
+            <Button
+              variant="primary"
+              className="w-full"
+              disabled={busy || preview === null}
+              onClick={() => void restore()}
+            >
+              {busy ? 'Restoring…' : 'Restore this version'}
+            </Button>
+          )}
         </footer>
       )}
     </aside>

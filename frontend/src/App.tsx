@@ -272,21 +272,21 @@ function EditorRoute() {
   if (tool === 'paint') {
     return (
       <Suspense fallback={fallback}>
-        <PaintEditor docId={docId} />
+        <PaintEditor key={docId} docId={docId} />
       </Suspense>
     )
   }
   if (tool === 'drawio') {
     return (
       <Suspense fallback={fallback}>
-        <DrawioEditor docId={docId} />
+        <DrawioEditor key={docId} docId={docId} />
       </Suspense>
     )
   }
   if (tool === 'code') {
     return (
       <Suspense fallback={fallback}>
-        <CodeEditor docId={docId} />
+        <CodeEditor key={docId} docId={docId} />
       </Suspense>
     )
   }

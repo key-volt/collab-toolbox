@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.tools.drawio.template import file_template
-from tests.conftest import bearer
+from tests.conftest import bearer, create_member
 
 
 def _create(client: TestClient, token: str, tool: str, title: str) -> dict[str, object]:
@@ -13,6 +13,11 @@ def _create(client: TestClient, token: str, tool: str, title: str) -> dict[str, 
     assert response.status_code == 201, response.text
     body: dict[str, object] = response.json()
     return body
+
+
+def _second_member(client: TestClient, admin_token: str, username: str) -> str:
+    """Another approved, non-admin account — someone who owns nothing."""
+    return create_member(client, admin_token, username)
 
 
 def test_documents_require_a_whitelisted_account(client: TestClient) -> None:
@@ -94,15 +99,16 @@ def test_document_files_are_served_only_by_known_name(
     assert bad.status_code == 404
 
 
-def test_delete_is_admin_only_and_goes_to_trash(
+def test_delete_needs_the_owner_or_an_admin_and_goes_to_trash(
     client: TestClient, admin_token: str, member_token: str, booted: Path
 ) -> None:
     document = _create(client, member_token, "drawio", "Disposable")
+    other_token = _second_member(client, admin_token, "rowan")
 
-    refused = client.delete(f"/api/documents/{document['id']}", headers=bearer(member_token))
+    refused = client.delete(f"/api/documents/{document['id']}", headers=bearer(other_token))
     assert refused.status_code == 403
 
-    deleted = client.delete(f"/api/documents/{document['id']}", headers=bearer(admin_token))
+    deleted = client.delete(f"/api/documents/{document['id']}", headers=bearer(member_token))
     assert deleted.status_code == 204
     assert client.get("/api/documents", headers=bearer(member_token)).json() == []
     assert list((booted / "docs" / ".trash").iterdir()) != []

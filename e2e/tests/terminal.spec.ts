@@ -125,9 +125,29 @@ test('terminal: boots isolated, runs Python and plots, blocks tkinter, and stops
   await pushLine(page, 'import tkinter')
   await expect.poll(() => termText(page), { timeout: 60_000 }).toContain('cannot run in a browser')
 
-  // Stop breaks an infinite loop and the prompt comes back.
+  // The turtle wheel ships in the image. A deployment built without it degrades to a
+  // "not bundled" message — which is exactly what this assertion turns red.
+  await pushLine(page, 'import turtle')
+  await expect.poll(() => termStage(page), { timeout: 60_000 }).toBe('ready')
+  expect(await termText(page)).not.toContain('not bundled in this deployment')
+  const beforeTurtle = await sandboxFrame(page).evaluate(
+    () => window.__termDebug?.graphicsCount() ?? -1,
+  )
+  await pushLine(page, 't = turtle.Turtle()')
+  await expect.poll(() => termStage(page), { timeout: 60_000 }).toBe('ready')
+  await pushLine(page, 't.forward(80)')
+  await expect
+    .poll(
+      () => sandboxFrame(page).evaluate(() => window.__termDebug?.graphicsCount() ?? -1),
+      { timeout: 60_000 },
+    )
+    .toBeGreaterThan(beforeTurtle)
+
+  // Stop kills an infinite loop and stays stopped; Start boots a fresh session.
   await pushLine(page, 'while True: pass')
   await page.getByRole('button', { name: 'Stop' }).click()
+  await page.locator('[data-testid="sandbox-stopped"]').waitFor()
+  await page.getByRole('button', { name: 'Start' }).click()
   await expect.poll(() => termStage(page), { timeout: 240_000 }).toBe('ready')
   await pushLine(page, 'print("alive")')
   await expect.poll(() => termText(page), { timeout: 60_000 }).toContain('alive')

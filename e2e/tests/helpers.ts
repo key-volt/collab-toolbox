@@ -56,6 +56,42 @@ export async function createDocument(
   return body.id
 }
 
+export async function userId(request: APIRequestContext, username: string): Promise<string> {
+  const token = await adminToken(request)
+  const response = await request.get('/api/admin/users', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(response.ok()).toBe(true)
+  const users = (await response.json()) as { id: string; username: string }[]
+  const row = users.find((candidate) => candidate.username === username)
+  if (row === undefined) throw new Error(`no such user: ${username}`)
+  return row.id
+}
+
+// Documents start accessible to no one but their owner and admins; suites that put a
+// member into an admin-created document must grant that member access first.
+export async function setDocumentAccess(
+  request: APIRequestContext,
+  docId: string,
+  entries: { user_id: string; level: 'read' | 'edit' }[],
+): Promise<void> {
+  const token = await adminToken(request)
+  const response = await request.put(`/api/documents/${docId}/access`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { entries },
+  })
+  expect(response.ok()).toBe(true)
+}
+
+export async function grantEdit(
+  request: APIRequestContext,
+  docId: string,
+  username: string,
+): Promise<void> {
+  const id = await userId(request, username)
+  await setDocumentAccess(request, docId, [{ user_id: id, level: 'edit' }])
+}
+
 export async function signIn(page: Page, username: string, password: string): Promise<void> {
   await page.goto('/login')
   await page.getByLabel('Username').fill(username)

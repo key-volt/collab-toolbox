@@ -4,6 +4,7 @@ import type { BinaryFileData, ExcalidrawImperativeAPI } from '@excalidraw/excali
 import { generateNKeysBetween } from 'fractional-indexing'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { Awareness } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 
 import { usePresence } from '../../App'
@@ -35,6 +36,7 @@ interface DocumentDetail {
   tool: string
   title: string
   created_at: string
+  access: 'read' | 'edit' | 'manage'
   pages: PageRow[]
 }
 
@@ -165,8 +167,13 @@ export function PaintEditor({ docId }: { docId: string }) {
   const [renamingPage, setRenamingPage] = useState<string | null>(null)
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawImperativeAPI | null>(null)
   const [autosaveSeconds, setAutosaveSeconds] = useState(10)
+  // 'static' is the reader-facing fallback: nobody has seeded the live room, so the
+  // last save is shown from the stored pages instead of an empty canvas.
+  const [mode, setMode] = useState<'live' | 'static'>('live')
 
   const sessionRef = useRef<RoomSession | null>(null)
+  // The static copy has no provider; the binding still needs an awareness object.
+  const staticAwarenessRef = useRef<Awareness | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const bindingRef = useRef<ExcalidrawBinding | null>(null)
   const undoManagersRef = useRef(new Map<string, Y.UndoManager>())
@@ -202,8 +209,15 @@ export function PaintEditor({ docId }: { docId: string }) {
   )
 
   // The room: connect once per document, seed it when we are the elected first client,
-  // keep the order list and the presence roster mirrored into React state.
+  // keep the order list and the presence roster mirrored into React state. Readers
+  // join the same room but never write; a reader facing a never-seeded room switches
+  // to a static local copy of the last save instead.
+  const access = detail?.access ?? null
   useEffect(() => {
+    if (access === null) return
+    const canEdit = access !== 'read'
+    let cancelled = false
+
     const session = new RoomSession(
       'paint',
       docId,
@@ -213,7 +227,7 @@ export function PaintEditor({ docId }: { docId: string }) {
         onStatus: setConnected,
         onDenied: () => setDenied(true),
         onSynced: () => {
-          void seed()
+          void (canEdit ? seed() : readerProbe())
         },
       },
     )
@@ -236,23 +250,14 @@ export function PaintEditor({ docId }: { docId: string }) {
     // Deep-observe the pages map too, so a remote page rename re-renders the tabs.
     pagesMapOf(session.doc).observeDeep(syncOrder)
 
-    async function seed() {
-      const awareness = session.awareness
-      if (awareness === null) return
-      if (order.length > 0) {
-        syncOrder()
-        return
-      }
-      // Give awareness a moment to propagate so two simultaneous joiners agree on who
-      // the elected client is before either writes anything.
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      if (order.length > 0 || !isElected(awareness)) return
+    const seedFromStored = async () => {
       const fresh = await api<DocumentDetail>(`/api/documents/${docId}`)
       const contents = await Promise.all(
         fresh.pages.map((page) =>
           api<unknown>(`/api/documents/${docId}/files/${page.filename}`).catch(() => null),
         ),
       )
+      if (cancelled) return
       session.doc.transact(() => {
         fresh.pages.forEach((page, index) => {
           const raw: unknown = contents[index]
@@ -264,38 +269,79 @@ export function PaintEditor({ docId }: { docId: string }) {
       })
     }
 
-    session.connect()
-    const awareness = session.awareness
-    if (awareness !== null && user !== null) {
-      awareness.setLocalStateField('user', { name: user.username, color: colorFor(user.id) })
-      const publishPeers = () => setPeers(peersFrom(awareness))
-      awareness.on('change', publishPeers)
-      publishPeers()
+    async function seed() {
+      const awareness = session.awareness
+      if (awareness === null) return
+      if (order.length > 0) {
+        syncOrder()
+        return
+      }
+      // Give awareness a moment to propagate so two simultaneous joiners agree on who
+      // the elected client is before either writes anything.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      if (cancelled || order.length > 0 || !isElected(awareness)) return
+      await seedFromStored()
     }
-    syncOrder()
+
+    async function readerProbe() {
+      // A reader must never seed the shared room — the server would drop the writes.
+      // If nobody has seeded it, show the stored pages statically instead.
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      if (cancelled) return
+      if (order.length === 0) setMode('static')
+    }
+
+    if (mode === 'static') {
+      staticAwarenessRef.current = new Awareness(session.doc)
+      void seedFromStored()
+      syncOrder()
+    } else {
+      session.connect()
+      const awareness = session.awareness
+      if (awareness !== null && user !== null) {
+        awareness.setLocalStateField('user', {
+          name: user.username,
+          color: colorFor(user.id),
+          canEdit,
+        })
+        const publishPeers = () => setPeers(peersFrom(awareness))
+        awareness.on('change', publishPeers)
+        publishPeers()
+      }
+      syncOrder()
+    }
 
     const undoManagers = undoManagersRef.current
     return () => {
+      cancelled = true
       const finalAwareness = session.awareness
-      if (finalAwareness !== null && isElected(finalAwareness) && orderOf(session.doc).length > 0) {
+      if (
+        canEdit &&
+        finalAwareness !== null &&
+        isElected(finalAwareness) &&
+        orderOf(session.doc).length > 0
+      ) {
         void pushSnapshot('paint', docId, buildSnapshotBody(session.doc), 'application/json', true)
       }
       bindingRef.current?.destroy()
       bindingRef.current = null
+      staticAwarenessRef.current?.destroy()
+      staticAwarenessRef.current = null
       undoManagers.clear()
       setPeers([])
       session.destroy()
       sessionRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one room per document
-  }, [docId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one room per document, mode and access
+  }, [docId, access, mode])
 
   // Bind the canvas to the current page's element list.
   useEffect(() => {
     const session = sessionRef.current
     if (session === null || excalidrawAPI === null || currentPageId === null) return
     const page = pagesMapOf(session.doc).get(currentPageId)
-    const awareness = session.awareness
+    // The static copy has no provider awareness; a local one satisfies the binding.
+    const awareness = session.awareness ?? staticAwarenessRef.current
     const dom = containerRef.current
     if (page === undefined || awareness === null || dom === null) return
 
@@ -353,10 +399,12 @@ export function PaintEditor({ docId }: { docId: string }) {
       binding.destroy()
       bindingRef.current = null
     }
-  }, [excalidrawAPI, currentPageId, orderIds.length, assetStore])
+  }, [excalidrawAPI, currentPageId, orderIds.length, assetStore, access, mode])
 
-  // The elected client persists the document on the autosave cadence.
+  // The elected client persists the document on the autosave cadence. Readers never
+  // push — the election excludes them, and the server would refuse the push anyway.
   useEffect(() => {
+    if (access === 'read' || access === null) return
     const timer = setInterval(() => {
       const session = sessionRef.current
       const awareness = session?.awareness ?? null
@@ -367,7 +415,7 @@ export function PaintEditor({ docId }: { docId: string }) {
         .catch(() => undefined)
     }, autosaveSeconds * 1000)
     return () => clearInterval(timer)
-  }, [autosaveSeconds, docId])
+  }, [autosaveSeconds, docId, access])
 
   const restoreVersion = useCallback(
     (filename: string, content: string) => {
@@ -427,6 +475,9 @@ export function PaintEditor({ docId }: { docId: string }) {
     )
   }
 
+  const canMutate = access !== null && access !== 'read'
+  const canManage = access === 'manage'
+
   return (
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -434,14 +485,19 @@ export function PaintEditor({ docId }: { docId: string }) {
           <Link to="/t/paint" className="text-muted hover:text-text text-sm">
             ←
           </Link>
-          {detail !== null && <TitleEditor key={detail.title} docId={docId} title={detail.title} />}
+          {detail !== null &&
+            (canManage ? (
+              <TitleEditor key={detail.title} docId={docId} title={detail.title} />
+            ) : (
+              <span className="truncate text-sm font-medium">{detail.title}</span>
+            ))}
           <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
             {orderIds.map((pageId) => (
               <span key={pageId} className="flex items-center">
                 <button
                   type="button"
                   onClick={() => setCurrentPageId(pageId)}
-                  onDoubleClick={() => setRenamingPage(pageId)}
+                  onDoubleClick={() => canMutate && setRenamingPage(pageId)}
                   className={`rounded-md px-2.5 py-1 text-xs whitespace-nowrap transition ${
                     currentPageId === pageId
                       ? 'bg-raised text-text'
@@ -450,7 +506,7 @@ export function PaintEditor({ docId }: { docId: string }) {
                 >
                   {pageTitles[pageId]}
                 </button>
-                {user?.is_admin === true && orderIds.length > 1 && currentPageId === pageId && (
+                {canMutate && orderIds.length > 1 && currentPageId === pageId && (
                   <button
                     type="button"
                     aria-label="Delete page"
@@ -462,23 +518,32 @@ export function PaintEditor({ docId }: { docId: string }) {
                 )}
               </span>
             ))}
-            <button
-              type="button"
-              aria-label="Add page"
-              onClick={addPage}
-              className="text-muted hover:text-text px-2 text-sm"
-            >
-              +
-            </button>
+            {canMutate && (
+              <button
+                type="button"
+                aria-label="Add page"
+                onClick={addPage}
+                className="text-muted hover:text-text px-2 text-sm"
+              >
+                +
+              </button>
+            )}
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <SaveState connected={connected} lastSavedAt={savedAt} />
+            {canMutate && <SaveState connected={connected} lastSavedAt={savedAt} />}
             <Button onClick={() => setHistoryOpen((open) => !open)}>History</Button>
           </div>
         </header>
+        {mode === 'static' && (
+          <div className="text-muted flex shrink-0 items-center gap-3 border-b border-border bg-raised px-3 py-1.5 text-xs">
+            <span>Static view of the last save — reload to check for live editors.</span>
+            <Button onClick={() => window.location.reload()}>Reload</Button>
+          </div>
+        )}
         <div ref={containerRef} className="min-h-0 flex-1">
           <Excalidraw
-            theme="dark"
+            theme="light"
+            viewModeEnabled={!canMutate}
             excalidrawAPI={(apiInstance) => setExcalidrawAPI(apiInstance)}
             onPointerUpdate={(payload) => bindingRef.current?.onPointerUpdate(payload)}
           />
@@ -487,6 +552,7 @@ export function PaintEditor({ docId }: { docId: string }) {
       {historyOpen && (
         <HistoryPanel
           docId={docId}
+          canRestore={canMutate}
           onClose={() => setHistoryOpen(false)}
           onRestore={restoreVersion}
         />

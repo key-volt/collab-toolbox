@@ -33,8 +33,10 @@ export function SandboxPanel({
 }) {
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   const [stage, setStage] = useState('starting')
+  const [stopped, setStopped] = useState(false)
   const [frameEpoch, setFrameEpoch] = useState(0)
   const loadsRef = useRef(0)
+  const pendingRunRef = useRef<string | null>(null)
 
   const post = useCallback((message: object) => {
     // targetOrigin has to be '*': an opaque origin has no name to address. Safe,
@@ -50,6 +52,11 @@ export function SandboxPanel({
       const data = event.data as FrameMessage
       if (data.type === 'sandbox-ready') {
         post({ type: 'files', files: getFiles() })
+        const queuedRun = pendingRunRef.current
+        if (queuedRun !== null) {
+          pendingRunRef.current = null
+          post({ type: 'run', path: queuedRun, files: getFiles() })
+        }
       } else if (data.type === 'stage' && typeof data.stage === 'string') {
         setStage(typeof data.detail === 'string' ? `${data.stage}: ${data.detail}` : data.stage)
       }
@@ -61,24 +68,38 @@ export function SandboxPanel({
   const runnable =
     activePath !== null && (activePath.endsWith('.py') || activePath.endsWith('.js'))
 
-  const run = () => {
-    if (activePath === null) return
-    post({ type: 'run', path: activePath, files: getFiles() })
-  }
-
-  // Stop is a full frame reset on purpose: it depends on nothing inside the frame, so
-  // it works even while the sandbox is stuck in a hot loop.
-  const reset = useCallback(() => {
+  const boot = useCallback(() => {
     loadsRef.current = 0
+    setStopped(false)
     setStage('starting')
     setFrameEpoch((epoch) => epoch + 1)
   }, [])
+
+  // Stop tears the frame down and leaves it down: it depends on nothing inside the
+  // frame, so it works even while the sandbox is stuck in a hot loop, and nothing
+  // boots again until Start (or Run) asks for it.
+  const stop = () => {
+    pendingRunRef.current = null
+    setStopped(true)
+    setStage('stopped')
+  }
+
+  const run = () => {
+    if (activePath === null) return
+    if (stopped) {
+      // Boot first, run when the fresh frame reports ready.
+      pendingRunRef.current = activePath
+      boot()
+      return
+    }
+    post({ type: 'run', path: activePath, files: getFiles() })
+  }
 
   // The sandbox cannot be stopped from navigating itself, but a navigation is always
   // visible as an extra load event — and the answer to one is a fresh frame.
   const onFrameLoad = () => {
     loadsRef.current += 1
-    if (loadsRef.current > 1) reset()
+    if (loadsRef.current > 1) boot()
   }
 
   return (
@@ -93,19 +114,31 @@ export function SandboxPanel({
             {/* `runnable` already proves activePath is non-null (aliased narrowing). */}
             Run {runnable ? baseName(activePath) : ''}
           </Button>
-          <Button onClick={reset}>Stop</Button>
+          <Button disabled={stopped} onClick={stop}>
+            Stop
+          </Button>
           <Button onClick={onClose}>Close</Button>
         </div>
       </header>
-      <iframe
-        key={frameEpoch}
-        ref={frameRef}
-        src={FRAME_SRC}
-        sandbox="allow-scripts"
-        title="Code sandbox"
-        className="min-h-0 w-full flex-1 border-0 bg-bg"
-        onLoad={onFrameLoad}
-      />
+      {stopped ? (
+        <div
+          className="text-muted flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3 bg-bg text-sm"
+          data-testid="sandbox-stopped"
+        >
+          <p>terminal stopped</p>
+          <Button onClick={boot}>Start</Button>
+        </div>
+      ) : (
+        <iframe
+          key={frameEpoch}
+          ref={frameRef}
+          src={FRAME_SRC}
+          sandbox="allow-scripts"
+          title="Code sandbox"
+          className="min-h-0 w-full flex-1 border-0 bg-bg"
+          onLoad={onFrameLoad}
+        />
+      )}
     </div>
   )
 }

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
+import { AccessDialog } from '../components/AccessDialog'
 import { Button, Dialog, EmptyState, ErrorLine, Field, TextInput } from '../components/ui'
 import { api } from '../lib/api'
-import { useAuth } from '../lib/auth'
 import { TOOLS, toolInfo } from '../tools'
 
 interface DocumentRow {
@@ -13,16 +13,18 @@ interface DocumentRow {
   created_at: string
   modified_at: string | null
   page_count: number
+  access: 'none' | 'read' | 'edit' | 'manage'
+  owner: string | null
 }
 
 export function Documents() {
   const { tool: toolFilter } = useParams()
-  const { user } = useAuth()
   const navigate = useNavigate()
   const [rows, setRows] = useState<DocumentRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<DocumentRow | null>(null)
+  const [sharing, setSharing] = useState<DocumentRow | null>(null)
 
   const reload = useCallback(() => {
     const query = toolFilter === undefined ? '' : `?tool=${encodeURIComponent(toolFilter)}`
@@ -54,28 +56,31 @@ export function Documents() {
         {(rows ?? []).map((row) => (
           <div
             key={row.id}
-            className="group relative rounded-md border border-border bg-surface transition hover:border-accent"
+            className={`group relative rounded-md border border-border bg-surface transition ${
+              row.access === 'none' ? 'opacity-70' : 'hover:border-accent'
+            }`}
           >
-            <Link to={`/t/${row.tool}/${row.id}`} className="block p-4">
-              <div className="text-muted mb-2 flex items-center gap-2 text-xs">
-                <span aria-hidden>{toolInfo(row.tool)?.glyph ?? '·'}</span>
-                <span>{toolInfo(row.tool)?.title ?? row.tool}</span>
-              </div>
-              <h2 className="truncate text-sm font-medium">{row.title}</h2>
-              <p className="text-muted mt-2 text-xs">
-                {String(row.page_count)} {row.page_count === 1 ? 'page' : 'pages'}
-                {row.modified_at !== null && ` · ${row.modified_at.slice(0, 10)}`}
-              </p>
-            </Link>
-            {user?.is_admin === true && (
-              <button
-                type="button"
-                aria-label={`Delete ${row.title}`}
-                className="text-muted hover:text-danger absolute top-2 right-2 hidden rounded px-1.5 py-0.5 text-xs group-hover:block"
-                onClick={() => setDeleting(row)}
-              >
-                Delete
-              </button>
+            {/* Every name is listed; without access the card does not open. */}
+            <CardBody row={row} openable={row.access !== 'none'} />
+            {row.access === 'manage' && (
+              <span className="absolute top-2 right-2 hidden gap-1 group-hover:flex">
+                <button
+                  type="button"
+                  aria-label={`Access for ${row.title}`}
+                  className="text-muted hover:text-text rounded px-1.5 py-0.5 text-xs"
+                  onClick={() => setSharing(row)}
+                >
+                  Access
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete ${row.title}`}
+                  className="text-muted hover:text-danger rounded px-1.5 py-0.5 text-xs"
+                  onClick={() => setDeleting(row)}
+                >
+                  Delete
+                </button>
+              </span>
             )}
           </div>
         ))}
@@ -100,7 +105,43 @@ export function Documents() {
           }}
         />
       )}
+      {sharing !== null && (
+        <AccessDialog
+          docId={sharing.id}
+          onClose={() => {
+            setSharing(null)
+            reload()
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+function CardBody({ row, openable }: { row: DocumentRow; openable: boolean }) {
+  const inner = (
+    <>
+      <div className="text-muted mb-2 flex items-center gap-2 text-xs">
+        <span aria-hidden>{toolInfo(row.tool)?.glyph ?? '·'}</span>
+        <span>{toolInfo(row.tool)?.title ?? row.tool}</span>
+        {row.access === 'read' && <span className="ml-auto">read-only</span>}
+        {row.access === 'none' && <span className="ml-auto">no access</span>}
+      </div>
+      <h2 className="truncate text-sm font-medium">{row.title}</h2>
+      <p className="text-muted mt-2 text-xs">
+        {String(row.page_count)} {row.page_count === 1 ? 'page' : 'pages'}
+        {row.modified_at !== null && ` · ${row.modified_at.slice(0, 10)}`}
+        {row.owner !== null && ` · ${row.owner}`}
+      </p>
+    </>
+  )
+  if (!openable) {
+    return <div className="block p-4">{inner}</div>
+  }
+  return (
+    <Link to={`/t/${row.tool}/${row.id}`} className="block p-4">
+      {inner}
+    </Link>
   )
 }
 

@@ -182,13 +182,22 @@ const boot = async () => {
   })
   pyodide.runPython(BOOT_PY)
 
+  // The wheel is optional per deployment. Whether a failed load throws or is only
+  // logged, what matters is whether the module ended up importable — Python itself is
+  // asked, and a missing wheel becomes a clear message instead of a bare ImportError.
+  // (This Pyodide generation ships no stdlib turtle, so the check is unambiguous.)
   try {
     await pyodide.loadPackage(`${BASE}vendor/turtle-0.0.1-py3-none-any.whl`)
   } catch {
-    pyodide.runPython(
-      '_sandbox_block_module("turtle", "turtle is not bundled in this deployment")',
-    )
+    // the check below decides what this means
   }
+  pyodide.runPython(
+    [
+      'import importlib.util',
+      'if importlib.util.find_spec("turtle") is None:',
+      '    _sandbox_block_module("turtle", "turtle is not bundled in this deployment")',
+    ].join('\n'),
+  )
 
   const consoleModule = pyodide.pyimport('pyodide.console')
   const PyodideConsole = consoleModule.PyodideConsole

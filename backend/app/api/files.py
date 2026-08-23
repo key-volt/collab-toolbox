@@ -11,6 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from app.auth.access import require_access
 from app.auth.deps import SessionDep, WhitelistedUser
 from app.config import get_settings
 from app.models import Document, Upload, new_id
@@ -27,7 +28,7 @@ _SERVE_HEADERS = {
 
 @router.post("", status_code=201)
 async def upload_file(
-    _user: WhitelistedUser,
+    user: WhitelistedUser,
     session: SessionDep,
     file: Annotated[UploadFile, File()],
     document_id: Annotated[str | None, Form()] = None,
@@ -42,8 +43,11 @@ async def upload_file(
     mime = uploads.sniff_mime(content)
     if mime is None:
         raise HTTPException(status_code=415, detail="file type is not supported")
-    if document_id is not None and await session.get(Document, document_id) is None:
-        raise HTTPException(status_code=404, detail="no such document")
+    if document_id is not None:
+        document = await session.get(Document, document_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="no such document")
+        await require_access(session, user, document, "edit")
     # The id is the filename on disk and is used before the first flush, so it cannot
     # come from the column default.
     row = Upload(id=new_id(), document_id=document_id, mime=mime, bytes=len(content))
@@ -54,10 +58,14 @@ async def upload_file(
 
 
 @router.get("/{file_id}")
-async def read_file(file_id: str, _user: WhitelistedUser, session: SessionDep) -> FileResponse:
+async def read_file(file_id: str, user: WhitelistedUser, session: SessionDep) -> FileResponse:
     row = await session.get(Upload, file_id)
     if row is None:
         raise HTTPException(status_code=404, detail="no such file")
+    if row.document_id is not None:
+        document = await session.get(Document, row.document_id)
+        if document is not None:
+            await require_access(session, user, document, "read")
     path = get_settings().uploads_dir / row.id
     if not path.is_file():
         raise HTTPException(status_code=404, detail="no such file")

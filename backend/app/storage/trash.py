@@ -40,6 +40,7 @@ def move_to_trash(
     document: dict[str, Any],
     pages: list[dict[str, Any]],
     uploads: list[dict[str, Any]],
+    access: list[dict[str, Any]],
 ) -> str:
     directory = document_dir(settings, dir_name)
     manifest = {
@@ -47,6 +48,7 @@ def move_to_trash(
         "document": document,
         "pages": pages,
         "uploads": uploads,
+        "access": access,
     }
     (directory / MANIFEST).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     name = f"{_timestamp()}-{dir_name}"

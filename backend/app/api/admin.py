@@ -14,7 +14,7 @@ from sqlalchemy import select
 from app.auth.deps import AdminUser, SessionDep
 from app.auth.passwords import hash_password
 from app.config import get_settings
-from app.models import Document, Page, Upload, User
+from app.models import Document, DocumentAccess, Page, Upload, User
 from app.storage import trash
 
 router = APIRouter(prefix="/admin")
@@ -133,6 +133,11 @@ async def restore_trash(name: str, _admin: AdminUser, session: SessionDep) -> Re
     if manifest is None:
         raise HTTPException(status_code=409, detail="cannot restore this entry")
     document: dict[str, Any] = manifest.get("document", {})
+    # Accounts can disappear while an entry sits in the trash; a stale owner or grant
+    # must not fail the restore, so both are checked against the users table first.
+    users_result = await session.execute(select(User.id))
+    known_users = set(users_result.scalars().all())
+    owner_id = document.get("owner_id")
     session.add(
         Document(
             id=str(document["id"]),
@@ -140,8 +145,18 @@ async def restore_trash(name: str, _admin: AdminUser, session: SessionDep) -> Re
             title=str(document["title"]),
             dir_name=str(document["dir_name"]),
             created_at=str(document["created_at"]),
+            owner_id=str(owner_id) if owner_id in known_users else None,
         )
     )
+    for grant in manifest.get("access", []):
+        if grant.get("user_id") in known_users and grant.get("level") in ("read", "edit"):
+            session.add(
+                DocumentAccess(
+                    document_id=str(document["id"]),
+                    user_id=str(grant["user_id"]),
+                    level=str(grant["level"]),
+                )
+            )
     for page in manifest.get("pages", []):
         session.add(
             Page(

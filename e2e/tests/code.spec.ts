@@ -6,6 +6,7 @@ import {
   captureBrowserErrors,
   createDocument,
   createWhitelistedUser,
+  grantEdit,
   signIn,
   uniqueName,
 } from './helpers'
@@ -45,6 +46,7 @@ test('code: edits converge, undo is per user, cursors are file-scoped, lint repo
   const memberName = uniqueName('coder')
   await createWhitelistedUser(request, memberName, 'a-long-password')
   const docId = await createDocument(request, 'code', uniqueName('Project'))
+  await grantEdit(request, docId, memberName)
 
   const contextA = await browser.newContext()
   const contextB = await browser.newContext()

@@ -5,6 +5,7 @@ import {
   captureBrowserErrors,
   createDocument,
   createWhitelistedUser,
+  grantEdit,
   signIn,
   uniqueName,
 } from './helpers'
@@ -90,6 +91,7 @@ test('paint: edits converge, undo is per user, cursors are page-isolated, reconn
   const memberName = uniqueName('painter')
   await createWhitelistedUser(request, memberName, 'a-long-password')
   const docId = await createDocument(request, 'paint', uniqueName('Board'))
+  await grantEdit(request, docId, memberName)
 
   const contextA = await browser.newContext()
   const contextB = await browser.newContext()

@@ -66,10 +66,12 @@ const term = new Terminal({
   fontSize: 13,
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   theme: {
-    background: '#0b0b0d',
-    foreground: '#e7e7ea',
-    cursor: '#6d7cff',
-    selectionBackground: '#26262e',
+    background: '#f5f0e8',
+    foreground: '#201c18',
+    cursor: '#4653d6',
+    selectionBackground: '#ddd3c4',
+    // Errors print in ANSI red; the default red is tuned for dark backgrounds.
+    red: '#b3261e',
   },
 })
 const fit = new FitAddon()

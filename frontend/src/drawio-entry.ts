@@ -11,6 +11,11 @@ import type { DrawioFile, DrawioUi } from './vendor/y-mxgraph/types/drawio'
 
 const DRAWIO_BASE = '/drawio/'
 
+// The parent opens this page with ?readonly=1 for users who hold read access only.
+// The shared document still syncs in (the server enforces the write side); the graph
+// simply refuses local interaction.
+const READ_ONLY = new URLSearchParams(window.location.search).get('readonly') === '1'
+
 interface DrawioAppUi extends DrawioUi {
   refresh(): void
 }
@@ -97,13 +102,12 @@ function configure(): void {
   drawioWindow.PLUGINS_BASE_PATH = DRAWIO_BASE
   // stealth stops draw.io fetching fonts and other resources from third parties —
   // nothing leaves this host at runtime. demo makes it create a blank local file
-  // instead of raising its "Save diagrams to:" storage dialog.
+  // instead of raising its "Save diagrams to:" storage dialog. The default (light)
+  // UI matches the app theme.
   drawioWindow.urlParams = {
     math: '0',
     stealth: '1',
     demo: '1',
-    ui: 'dark',
-    dark: '1',
   }
 }
 
@@ -220,6 +224,13 @@ async function boot(): Promise<void> {
             ): unknown
             getDefaultParent(): unknown
           }
+          if (READ_ONLY) {
+            const graph = bindingUi.editor.graph as unknown as {
+              setEnabled(enabled: boolean): void
+            }
+            graph.setEnabled(false)
+          }
+
           const debugWindow = window as unknown as { __editorDebug?: unknown }
           debugWindow.__editorDebug = {
             addCell: (label: string, x: number, y: number) => {

@@ -5,6 +5,7 @@ import {
   captureBrowserErrors,
   createDocument,
   createWhitelistedUser,
+  grantEdit,
   signIn,
   uniqueName,
 } from './helpers'
@@ -52,6 +53,7 @@ test('drawio: edits converge across clients and undo is per user', async ({
   const memberName = uniqueName('diagrammer')
   await createWhitelistedUser(request, memberName, 'a-long-password')
   const docId = await createDocument(request, 'drawio', uniqueName('Plan'))
+  await grantEdit(request, docId, memberName)
 
   const contextA = await browser.newContext()
   const contextB = await browser.newContext()

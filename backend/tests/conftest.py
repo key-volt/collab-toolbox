@@ -57,12 +57,11 @@ def admin_token(client: TestClient) -> str:
     return login(client, "admin", ADMIN_PASSWORD)
 
 
-@pytest.fixture
-def member_token(client: TestClient, admin_token: str) -> str:
-    """A whitelisted, non-admin account's token."""
+def create_member(client: TestClient, admin_token: str, username: str) -> str:
+    """Create and approve a non-admin account, returning its token."""
     created = client.post(
         "/api/admin/users",
-        json={"username": "casey", "password": "a-long-password"},
+        json={"username": username, "password": "a-long-password"},
         headers=bearer(admin_token),
     )
     assert created.status_code == 201, created.text
@@ -72,4 +71,10 @@ def member_token(client: TestClient, admin_token: str) -> str:
         headers=bearer(admin_token),
     )
     assert patched.status_code == 200, patched.text
-    return login(client, "casey", "a-long-password")
+    return login(client, username, "a-long-password")
+
+
+@pytest.fixture
+def member_token(client: TestClient, admin_token: str) -> str:
+    """A whitelisted, non-admin account's token."""
+    return create_member(client, admin_token, "casey")

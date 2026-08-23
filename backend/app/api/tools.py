@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 
+from app.auth.access import require_access
 from app.auth.deps import SessionDep, WhitelistedUser
 from app.config import get_settings
 from app.models import Document, Page
@@ -48,7 +49,7 @@ async def list_tools(_user: WhitelistedUser) -> ToolsInfo:
 
 @router.post("/{slug}/{doc_id}/snapshot")
 async def push_snapshot(
-    slug: str, doc_id: str, request: Request, _user: WhitelistedUser, session: SessionDep
+    slug: str, doc_id: str, request: Request, user: WhitelistedUser, session: SessionDep
 ) -> SnapshotResult:
     tool = get_tool(slug)
     if tool is None:
@@ -56,6 +57,7 @@ async def push_snapshot(
     document = await session.get(Document, doc_id)
     if document is None or document.tool != slug:
         raise HTTPException(status_code=404, detail="no such document")
+    await require_access(session, user, document, "edit")
 
     settings = get_settings()
     cap = settings.upload_max_mb * 1024 * 1024

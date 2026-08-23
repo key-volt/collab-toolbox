@@ -92,10 +92,16 @@ export class RoomSession {
   }
 }
 
-// The elected client is the lowest Yjs client id among connected peers. Deterministic,
-// needs no coordination, and re-elects by itself when that peer leaves.
+// The elected client is the lowest Yjs client id among peers that may write.
+// Deterministic, needs no coordination, re-elects by itself when that peer leaves —
+// and a read-only spectator can never win, because whatever it wrote (a seed, a
+// snapshot) would be dropped by the server and lost.
 export function isElected(awareness: Awareness): boolean {
-  const ids = [...awareness.getStates().keys()]
+  const ids: number[] = []
+  for (const [clientId, state] of awareness.getStates()) {
+    const user = (state as { user?: { canEdit?: boolean } }).user
+    if (user?.canEdit === true) ids.push(clientId)
+  }
   return ids.length > 0 && Math.min(...ids) === awareness.clientID
 }
 
@@ -117,17 +123,19 @@ export interface Peer {
   clientId: number
   name: string
   color: string
+  canEdit: boolean
 }
 
-// The presence roster, read from awareness. Both tools publish the same user fields.
+// The presence roster, read from awareness. Every tool publishes the same user fields.
 export function peersFrom(awareness: Awareness): Peer[] {
   const peers: Peer[] = []
   for (const [clientId, state] of awareness.getStates()) {
-    const user = (state as { user?: { name?: string; color?: string } }).user
+    const user = (state as { user?: { name?: string; color?: string; canEdit?: boolean } }).user
     peers.push({
       clientId,
       name: user?.name ?? `guest-${String(clientId)}`,
-      color: user?.color ?? '#9a9aa5',
+      color: user?.color ?? '#6b6156',
+      canEdit: user?.canEdit === true,
     })
   }
   return peers.sort((a, b) => a.clientId - b.clientId)

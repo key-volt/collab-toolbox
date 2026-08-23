@@ -49,6 +49,7 @@ interface DocumentDetail {
   tool: string
   title: string
   created_at: string
+  access: 'read' | 'edit' | 'manage'
   pages: PageRow[]
 }
 
@@ -169,12 +170,12 @@ function editorTheme(): Extension {
         color: 'var(--color-muted)',
         border: 'none',
       },
-      '.cm-activeLine': { backgroundColor: 'rgba(255,255,255,0.03)' },
-      '.cm-activeLineGutter': { backgroundColor: 'rgba(255,255,255,0.03)' },
+      '.cm-activeLine': { backgroundColor: 'rgba(0,0,0,0.04)' },
+      '.cm-activeLineGutter': { backgroundColor: 'rgba(0,0,0,0.04)' },
       '&.cm-focused': { outline: 'none' },
       '.cm-ySelectionInfo': { fontFamily: 'var(--font-sans)', padding: '1px 4px' },
     },
-    { dark: true },
+    { dark: false },
   )
 }
 
@@ -201,6 +202,9 @@ export function CodeEditor({ docId }: { docId: string }) {
     | { kind: 'delete'; fileId: string; path: string }
     | null
   >(null)
+  // 'static' is the reader-facing fallback: nobody has seeded the live room, so the
+  // last save is shown from the stored files instead of an empty project.
+  const [mode, setMode] = useState<'live' | 'static'>('live')
 
   const sessionRef = useRef<RoomSession | null>(null)
   const editorHostRef = useRef<HTMLDivElement | null>(null)
@@ -215,8 +219,15 @@ export function CodeEditor({ docId }: { docId: string }) {
   }, [docId])
 
   // The room: connect once per document, seed it when we are the elected first client,
-  // and mirror the file list plus presence into React state.
+  // and mirror the file list plus presence into React state. Readers join the same
+  // room but never write; a reader facing a never-seeded room switches to a static
+  // local copy of the last save instead.
+  const access = detail?.access ?? null
   useEffect(() => {
+    if (access === null) return
+    const canEdit = access !== 'read'
+    let cancelled = false
+
     const session = new RoomSession(
       'code',
       docId,
@@ -226,7 +237,7 @@ export function CodeEditor({ docId }: { docId: string }) {
         onStatus: setConnected,
         onDenied: () => setDenied(true),
         onSynced: () => {
-          void seed()
+          void (canEdit ? seed() : readerProbe())
         },
       },
     )
@@ -246,23 +257,14 @@ export function CodeEditor({ docId }: { docId: string }) {
     pathsOf(session.doc).observe(syncEntries)
     foldersOf(session.doc).observe(syncEntries)
 
-    async function seed() {
-      const awareness = session.awareness
-      if (awareness === null) return
-      if (pathsOf(session.doc).size > 0) {
-        syncEntries()
-        return
-      }
-      // Let awareness settle so simultaneous first joiners agree on the elected client
-      // before either writes anything.
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      if (pathsOf(session.doc).size > 0 || !isElected(awareness)) return
+    const seedFromStored = async () => {
       const fresh = await api<DocumentDetail>(`/api/documents/${docId}`)
       const contents = await Promise.all(
         fresh.pages.map((page) =>
           apiText(`/api/documents/${docId}/files/${page.filename}`).catch(() => ''),
         ),
       )
+      if (cancelled) return
       session.doc.transact(() => {
         fresh.pages.forEach((page, index) => {
           const id = crypto.randomUUID()
@@ -274,37 +276,72 @@ export function CodeEditor({ docId }: { docId: string }) {
       })
     }
 
-    session.connect()
-    const awareness = session.awareness
-    if (awareness !== null && user !== null) {
-      const color = colorFor(user.id)
-      awareness.setLocalStateField('user', {
-        name: user.username,
-        color,
-        colorLight: color.replace(')', ' / 0.25)'),
-      })
-      const publishPresence = () => {
-        setPeers(peersFrom(awareness))
-        const perFile: Record<string, string[]> = {}
-        for (const [clientId, state] of awareness.getStates()) {
-          if (clientId === awareness.clientID) continue
-          const typed = state as { codeFile?: string; user?: { color?: string } }
-          if (typeof typed.codeFile !== 'string') continue
-          const colors = perFile[typed.codeFile] ?? []
-          colors.push(typed.user?.color ?? '#9a9aa5')
-          perFile[typed.codeFile] = colors
-        }
-        setFilePresence(perFile)
+    async function seed() {
+      const awareness = session.awareness
+      if (awareness === null) return
+      if (pathsOf(session.doc).size > 0) {
+        syncEntries()
+        return
       }
-      awareness.on('change', publishPresence)
-      publishPresence()
+      // Let awareness settle so simultaneous first joiners agree on the elected client
+      // before either writes anything.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      if (cancelled || pathsOf(session.doc).size > 0 || !isElected(awareness)) return
+      await seedFromStored()
     }
-    syncEntries()
+
+    async function readerProbe() {
+      // A reader must never seed the shared room — the server would drop the writes.
+      // If nobody has seeded it, show the stored files statically instead.
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      if (cancelled) return
+      if (pathsOf(session.doc).size === 0) setMode('static')
+    }
+
+    if (mode === 'static') {
+      // A local, never-connected copy: same document shape, no provider, no awareness.
+      void seedFromStored()
+      syncEntries()
+    } else {
+      session.connect()
+      const awareness = session.awareness
+      if (awareness !== null && user !== null) {
+        const color = colorFor(user.id)
+        awareness.setLocalStateField('user', {
+          name: user.username,
+          color,
+          colorLight: color.replace(')', ' / 0.25)'),
+          canEdit,
+        })
+        const publishPresence = () => {
+          setPeers(peersFrom(awareness))
+          const perFile: Record<string, string[]> = {}
+          for (const [clientId, state] of awareness.getStates()) {
+            if (clientId === awareness.clientID) continue
+            const typed = state as { codeFile?: string; user?: { color?: string } }
+            if (typeof typed.codeFile !== 'string') continue
+            const colors = perFile[typed.codeFile] ?? []
+            colors.push(typed.user?.color ?? '#6b6156')
+            perFile[typed.codeFile] = colors
+          }
+          setFilePresence(perFile)
+        }
+        awareness.on('change', publishPresence)
+        publishPresence()
+      }
+      syncEntries()
+    }
 
     const undoManagers = undoManagersRef.current
     return () => {
+      cancelled = true
       const finalAwareness = session.awareness
-      if (finalAwareness !== null && isElected(finalAwareness) && pathsOf(session.doc).size > 0) {
+      if (
+        canEdit &&
+        finalAwareness !== null &&
+        isElected(finalAwareness) &&
+        pathsOf(session.doc).size > 0
+      ) {
         healPathConflicts(session.doc)
         void pushSnapshot('code', docId, buildSnapshotBody(session.doc), 'application/json', true)
       }
@@ -315,8 +352,8 @@ export function CodeEditor({ docId }: { docId: string }) {
       session.destroy()
       sessionRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one room per document
-  }, [docId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one room per document, mode and access
+  }, [docId, access, mode])
 
   // Bind the editor to the active file. Presence of the file is the dependency that
   // matters — unrelated tree changes must not rebuild the view mid-typing.
@@ -327,17 +364,19 @@ export function CodeEditor({ docId }: { docId: string }) {
     const session = sessionRef.current
     const host = editorHostRef.current
     if (session === null || host === null || activeFileId === null || !activeExists) return
+    // Null awareness is the static reader copy: same editor, no collaboration layer.
     const awareness = session.awareness
     const text = filesOf(session.doc).get(activeFileId)
     const path = pathsOf(session.doc).get(activeFileId)
-    if (awareness === null || text === undefined || path === undefined) return
+    if (text === undefined || path === undefined) return
+    const readOnly = access === 'read'
 
     let undoManager = undoManagersRef.current.get(activeFileId)
     if (undoManager === undefined) {
       undoManager = new Y.UndoManager(text)
       undoManagersRef.current.set(activeFileId, undoManager)
     }
-    awareness.setLocalStateField('codeFile', activeFileId)
+    awareness?.setLocalStateField('codeFile', activeFileId)
 
     const language = languageFor(path)
     const state = EditorState.create({
@@ -356,7 +395,8 @@ export function CodeEditor({ docId }: { docId: string }) {
         language.extension,
         lintExtensionFor(language.lint, path),
         lintGutter(),
-        yCollab(text, awareness, { undoManager }),
+        readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
+        awareness === null ? [] : [yCollab(text, awareness, { undoManager })],
         editorTheme(),
       ],
     })
@@ -396,10 +436,12 @@ export function CodeEditor({ docId }: { docId: string }) {
       view.destroy()
       if (viewRef.current === view) viewRef.current = null
     }
-  }, [activeFileId, activeExists])
+  }, [activeFileId, activeExists, access, mode])
 
-  // The elected client persists the project on the autosave cadence.
+  // The elected client persists the project on the autosave cadence. Readers never
+  // push — the election excludes them, and the server would refuse the push anyway.
   useEffect(() => {
+    if (access === 'read' || access === null) return
     const timer = setInterval(() => {
       const session = sessionRef.current
       const awareness = session?.awareness ?? null
@@ -411,7 +453,7 @@ export function CodeEditor({ docId }: { docId: string }) {
         .catch(() => undefined)
     }, autosaveSeconds * 1000)
     return () => clearInterval(timer)
-  }, [autosaveSeconds, docId])
+  }, [autosaveSeconds, docId, access])
 
   const restoreVersion = useCallback((filename: string, content: string) => {
     const session = sessionRef.current
@@ -512,6 +554,8 @@ export function CodeEditor({ docId }: { docId: string }) {
     )
   }
 
+  const canMutate = access !== null && access !== 'read'
+  const canManage = access === 'manage'
   const tree = buildTree(entries, extraFolders)
   const visibleRows = tree.filter((row) => {
     let parent = parentOf(row.path)
@@ -527,26 +571,28 @@ export function CodeEditor({ docId }: { docId: string }) {
       <aside className="flex w-56 shrink-0 flex-col border-r border-border">
         <header className="flex h-11 shrink-0 items-center justify-between border-b border-border px-3">
           <span className="text-muted text-xs">Files</span>
-          <span className="flex gap-1">
-            <button
-              type="button"
-              aria-label="New file"
-              title="New file"
-              className="text-muted hover:text-text rounded px-1.5 text-sm"
-              onClick={() => setDialog({ kind: 'new-file', prefill: folderPrefill(activePath) })}
-            >
-              +
-            </button>
-            <button
-              type="button"
-              aria-label="New folder"
-              title="New folder"
-              className="text-muted hover:text-text rounded px-1.5 text-sm"
-              onClick={() => setDialog({ kind: 'new-folder', prefill: folderPrefill(activePath) })}
-            >
-              ⊞
-            </button>
-          </span>
+          {canMutate && (
+            <span className="flex gap-1">
+              <button
+                type="button"
+                aria-label="New file"
+                title="New file"
+                className="text-muted hover:text-text rounded px-1.5 text-sm"
+                onClick={() => setDialog({ kind: 'new-file', prefill: folderPrefill(activePath) })}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                aria-label="New folder"
+                title="New folder"
+                className="text-muted hover:text-text rounded px-1.5 text-sm"
+                onClick={() => setDialog({ kind: 'new-folder', prefill: folderPrefill(activePath) })}
+              >
+                ⊞
+              </button>
+            </span>
+          )}
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-testid="file-tree">
           {visibleRows.map((row) =>
@@ -590,28 +636,32 @@ export function CodeEditor({ docId }: { docId: string }) {
                     style={{ backgroundColor: color }}
                   />
                 ))}
-                <button
-                  type="button"
-                  aria-label={`Rename ${row.path}`}
-                  className="text-muted hover:text-text hidden px-1 text-xs group-hover:block"
-                  onClick={() =>
-                    row.fileId !== undefined &&
-                    setDialog({ kind: 'rename', fileId: row.fileId, path: row.path })
-                  }
-                >
-                  ✎
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Delete ${row.path}`}
-                  className="text-muted hover:text-danger hidden px-1 text-xs group-hover:block"
-                  onClick={() =>
-                    row.fileId !== undefined &&
-                    setDialog({ kind: 'delete', fileId: row.fileId, path: row.path })
-                  }
-                >
-                  ✕
-                </button>
+                {canMutate && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={`Rename ${row.path}`}
+                      className="text-muted hover:text-text hidden px-1 text-xs group-hover:block"
+                      onClick={() =>
+                        row.fileId !== undefined &&
+                        setDialog({ kind: 'rename', fileId: row.fileId, path: row.path })
+                      }
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${row.path}`}
+                      className="text-muted hover:text-danger hidden px-1 text-xs group-hover:block"
+                      onClick={() =>
+                        row.fileId !== undefined &&
+                        setDialog({ kind: 'delete', fileId: row.fileId, path: row.path })
+                      }
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
               </div>
             ),
           )}
@@ -623,17 +673,28 @@ export function CodeEditor({ docId }: { docId: string }) {
           <Link to="/t/code" className="text-muted hover:text-text text-sm">
             ←
           </Link>
-          {detail !== null && <TitleEditor key={detail.title} docId={docId} title={detail.title} />}
+          {detail !== null &&
+            (canManage ? (
+              <TitleEditor key={detail.title} docId={docId} title={detail.title} />
+            ) : (
+              <span className="truncate text-sm font-medium">{detail.title}</span>
+            ))}
           <span className="text-muted truncate text-xs" data-testid="active-path">
             {activePath ?? ''}
           </span>
           <div className="ml-auto flex items-center gap-3">
-            <SaveState connected={connected} lastSavedAt={savedAt} />
-            {activeIsPython && <Button onClick={formatActiveFile}>Format</Button>}
+            {canMutate && <SaveState connected={connected} lastSavedAt={savedAt} />}
+            {activeIsPython && canMutate && <Button onClick={formatActiveFile}>Format</Button>}
             <Button onClick={() => setTerminalOpen((open) => !open)}>Terminal</Button>
             <Button onClick={() => setHistoryOpen((open) => !open)}>History</Button>
           </div>
         </header>
+        {mode === 'static' && (
+          <div className="text-muted flex shrink-0 items-center gap-3 border-b border-border bg-raised px-3 py-1.5 text-xs">
+            <span>Static view of the last save — reload to check for live editors.</span>
+            <Button onClick={() => window.location.reload()}>Reload</Button>
+          </div>
+        )}
         <div ref={editorHostRef} className="min-h-0 flex-1 overflow-hidden" />
         {terminalOpen && (
           <SandboxPanel
@@ -645,7 +706,12 @@ export function CodeEditor({ docId }: { docId: string }) {
       </div>
 
       {historyOpen && (
-        <HistoryPanel docId={docId} onClose={() => setHistoryOpen(false)} onRestore={restoreVersion} />
+        <HistoryPanel
+          docId={docId}
+          canRestore={canMutate}
+          onClose={() => setHistoryOpen(false)}
+          onRestore={restoreVersion}
+        />
       )}
 
       {dialog !== null && (dialog.kind === 'new-file' || dialog.kind === 'new-folder') && (
