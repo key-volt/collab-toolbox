@@ -125,6 +125,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The installer carries its own copy of the compose file so one script is
+      # enough on a target machine; this keeps the two copies identical.
+      - name: Installer compose matches the shipped compose
+        run: sh deploy/setup.sh print-compose | diff - deploy/docker-compose.yml
+
       - uses: docker/setup-buildx-action@v4
 
       - name: Build the image
@@ -143,7 +148,7 @@ jobs:
       - name: Prepare a deployment
         working-directory: deploy
         run: |
-          mkdir -p data secrets
+          mkdir -p data secrets certs
           umask 077
           openssl rand -hex 32 > secrets/jwt_secret
           openssl rand -hex 24 > secrets/admin_password

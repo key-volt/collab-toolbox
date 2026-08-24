@@ -23,15 +23,34 @@ acme)
 	fi
 	SITE_ADDRESS="$DOMAIN"
 	;;
+custom)
+	if [ ! -f /certs/cert.pem ] || [ ! -f /certs/key.pem ]; then
+		echo "entrypoint: TLS_MODE=custom needs cert.pem and key.pem in the mounted /certs" >&2
+		exit 1
+	fi
+	if [ "$DOMAIN" = "localhost" ]; then
+		SITE_ADDRESS="https://:8443"
+	else
+		SITE_ADDRESS="$DOMAIN"
+	fi
+	;;
 off)
 	SITE_ADDRESS="http://:8080"
 	;;
 *)
-	echo "entrypoint: TLS_MODE must be 'acme' or 'off', got '$TLS_MODE'" >&2
+	echo "entrypoint: TLS_MODE must be 'acme', 'custom' or 'off', got '$TLS_MODE'" >&2
 	exit 1
 	;;
 esac
 export SITE_ADDRESS
+
+# The Caddyfile imports this file; only the custom mode puts a directive in it.
+if [ "$TLS_MODE" = "custom" ]; then
+	printf 'tls /certs/cert.pem /certs/key.pem\n' >/run/caddy-tls.conf
+else
+	: >/run/caddy-tls.conf
+fi
+chmod 644 /run/caddy-tls.conf
 
 # Match the service account to the owner of the mount, so files written inside the
 # container are readable and writable on the host.

@@ -27,6 +27,10 @@
 		format console
 	}
 
+	# Written by the entrypoint at container start; empty except in custom
+	# certificate mode, where it points Caddy at the mounted certificate pair.
+	import /run/caddy-tls.conf
+
 	encode zstd gzip
 
 	@https expression `{http.request.scheme} == "https"`
