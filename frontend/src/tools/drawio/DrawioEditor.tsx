@@ -10,7 +10,14 @@ import { TitleEditor } from '../../components/TitleEditor'
 import { Button } from '../../components/ui'
 import { api, apiText, getAccessToken, refreshSession } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { colorFor, isElected, peersFrom, RoomSession } from '../../lib/collab'
+import {
+  colorFor,
+  isElected,
+  peersFrom,
+  publishSaveOutcome,
+  RoomSession,
+  watchSaves,
+} from '../../lib/collab'
 import { pushSnapshot, type ToolsInfo } from '../../lib/snapshots'
 import { LOCAL_ORIGIN, xml2ydoc, ydoc2xml } from '../../vendor/y-mxgraph'
 import {
@@ -36,6 +43,7 @@ export function DrawioEditor({ docId }: { docId: string }) {
   const [connected, setConnected] = useState(false)
   const [denied, setDenied] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [autosaveSeconds, setAutosaveSeconds] = useState(10)
   // 'static' is the reader-facing fallback: nobody has seeded the live room, so the
@@ -124,7 +132,18 @@ export function DrawioEditor({ docId }: { docId: string }) {
           canEdit,
         })
         const roster = awareness
-        const publishPeers = () => setPeers(peersFrom(roster))
+        const mirrorSaves = watchSaves(
+          roster,
+          () => {
+            setSavedAt(Date.now())
+            setSaveError(null)
+          },
+          (reason) => setSaveError(reason),
+        )
+        const publishPeers = () => {
+          mirrorSaves()
+          setPeers(peersFrom(roster))
+        }
         roster.on('change', publishPeers)
         publishPeers()
       }
@@ -175,8 +194,12 @@ export function DrawioEditor({ docId }: { docId: string }) {
       const xml = ydoc2xml(session.doc, 2)
       if (!xml.includes('<diagram')) return
       void pushSnapshot('drawio', docId, xml, 'application/xml')
-        .then(() => setSavedAt(Date.now()))
-        .catch(() => undefined)
+        .then((failure) => {
+          if (sessionRef.current === session) publishSaveOutcome(awareness, failure)
+        })
+        .catch(() => {
+          if (sessionRef.current === session) publishSaveOutcome(awareness, 'connection failed')
+        })
     }, autosaveSeconds * 1000)
     return () => clearInterval(timer)
   }, [autosaveSeconds, docId, access])
@@ -215,7 +238,9 @@ export function DrawioEditor({ docId }: { docId: string }) {
               <span className="truncate text-sm font-medium">{detail.title}</span>
             ))}
           <div className="ml-auto flex items-center gap-3">
-            {canMutate && <SaveState connected={connected} lastSavedAt={savedAt} />}
+            {canMutate && (
+              <SaveState connected={connected} lastSavedAt={savedAt} error={saveError} />
+            )}
             <Button onClick={() => setHistoryOpen((open) => !open)}>History</Button>
           </div>
         </header>

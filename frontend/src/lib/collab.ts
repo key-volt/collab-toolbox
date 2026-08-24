@@ -105,6 +105,50 @@ export function isElected(awareness: Awareness): boolean {
   return ids.length > 0 && Math.min(...ids) === awareness.clientID
 }
 
+// The save label is room state, not tab state: only the elected client pushes, so it
+// publishes each push's outcome into awareness and every editor mirrors the newest
+// one. Receivers stamp their own clock when applying an outcome, so publishers'
+// clocks never skew the label; the published time only orders outcomes when the
+// election moves between clients.
+export function publishSaveOutcome(awareness: Awareness, error: string | null): void {
+  const own = (awareness.getLocalState() as { save?: { seq?: number } } | null)?.save
+  awareness.setLocalStateField('save', {
+    at: Date.now(),
+    seq: (own?.seq ?? 0) + 1,
+    error,
+  })
+}
+
+// Returns a handler for an awareness 'change' listener: it fires a callback once per
+// newly seen outcome, and never re-fires for an old outcome that resurfaces when the
+// state carrying the newest one leaves the room.
+export function watchSaves(
+  awareness: Awareness,
+  onSaved: () => void,
+  onFailed: (reason: string) => void,
+): () => void {
+  const seen = new Set<string>()
+  return () => {
+    let best: { at: number; key: string; error: string | null } | null = null
+    for (const [clientId, state] of awareness.getStates()) {
+      const save = (state as { save?: { at?: number; seq?: number; error?: string | null } }).save
+      if (save === undefined) continue
+      if (typeof save.at !== 'number' || typeof save.seq !== 'number') continue
+      if (best === null || save.at > best.at) {
+        best = {
+          at: save.at,
+          key: `${String(clientId)}:${String(save.seq)}`,
+          error: typeof save.error === 'string' ? save.error : null,
+        }
+      }
+    }
+    if (best === null || seen.has(best.key)) return
+    seen.add(best.key)
+    if (best.error === null) onSaved()
+    else onFailed(best.error)
+  }
+}
+
 // One colour per person, derived from the user id, so everyone sees the same colour
 // for the same collaborator.
 export function colorFor(seed: string): string {

@@ -30,7 +30,14 @@ import { TitleEditor } from '../../components/TitleEditor'
 import { Button, Dialog, ErrorLine, Field, TextInput } from '../../components/ui'
 import { api, apiText, getAccessToken, refreshSession } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { colorFor, isElected, peersFrom, RoomSession } from '../../lib/collab'
+import {
+  colorFor,
+  isElected,
+  peersFrom,
+  publishSaveOutcome,
+  RoomSession,
+  watchSaves,
+} from '../../lib/collab'
 import { pushSnapshot, type ToolsInfo } from '../../lib/snapshots'
 import { languageFor } from './languages'
 import { formatPython, lintExtensionFor } from './lint'
@@ -217,6 +224,7 @@ export function CodeEditor({ docId }: { docId: string }) {
   const [connected, setConnected] = useState(false)
   const [denied, setDenied] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [autosaveSeconds, setAutosaveSeconds] = useState(10)
@@ -342,7 +350,16 @@ export function CodeEditor({ docId }: { docId: string }) {
           colorLight: color.replace(')', ' / 0.25)'),
           canEdit,
         })
+        const mirrorSaves = watchSaves(
+          awareness,
+          () => {
+            setSavedAt(Date.now())
+            setSaveError(null)
+          },
+          (reason) => setSaveError(reason),
+        )
         const publishPresence = () => {
+          mirrorSaves()
           setPeers(peersFrom(awareness))
           const perFile: Record<string, string[]> = {}
           for (const [clientId, state] of awareness.getStates()) {
@@ -478,8 +495,12 @@ export function CodeEditor({ docId }: { docId: string }) {
       if (pathsOf(session.doc).size === 0) return
       healPathConflicts(session.doc)
       void pushSnapshot('code', docId, buildSnapshotBody(session.doc), 'application/json')
-        .then(() => setSavedAt(Date.now()))
-        .catch(() => undefined)
+        .then((failure) => {
+          if (sessionRef.current === session) publishSaveOutcome(awareness, failure)
+        })
+        .catch(() => {
+          if (sessionRef.current === session) publishSaveOutcome(awareness, 'connection failed')
+        })
     }, autosaveSeconds * 1000)
     return () => clearInterval(timer)
   }, [autosaveSeconds, docId, access])
@@ -712,7 +733,9 @@ export function CodeEditor({ docId }: { docId: string }) {
             {activePath ?? ''}
           </span>
           <div className="ml-auto flex items-center gap-3">
-            {canMutate && <SaveState connected={connected} lastSavedAt={savedAt} />}
+            {canMutate && (
+              <SaveState connected={connected} lastSavedAt={savedAt} error={saveError} />
+            )}
             {activeIsPython && canMutate && <Button onClick={formatActiveFile}>Format</Button>}
             <Button onClick={() => setTerminalOpen((open) => !open)}>Terminal</Button>
             <Button onClick={() => setHistoryOpen((open) => !open)}>History</Button>

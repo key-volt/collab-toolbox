@@ -14,7 +14,14 @@ import { TitleEditor } from '../../components/TitleEditor'
 import { Button, Dialog, Field, TextInput } from '../../components/ui'
 import { api, apiBlob, getAccessToken, refreshSession } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
-import { colorFor, isElected, peersFrom, RoomSession } from '../../lib/collab'
+import {
+  colorFor,
+  isElected,
+  peersFrom,
+  publishSaveOutcome,
+  RoomSession,
+  watchSaves,
+} from '../../lib/collab'
 import { pushSnapshot, type ToolsInfo } from '../../lib/snapshots'
 import {
   ExcalidrawBinding,
@@ -160,6 +167,7 @@ export function PaintEditor({ docId }: { docId: string }) {
   const [connected, setConnected] = useState(false)
   const [denied, setDenied] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [orderIds, setOrderIds] = useState<string[]>([])
   const [pageTitles, setPageTitles] = useState<Record<string, string>>({})
@@ -304,7 +312,18 @@ export function PaintEditor({ docId }: { docId: string }) {
           color: colorFor(user.id),
           canEdit,
         })
-        const publishPeers = () => setPeers(peersFrom(awareness))
+        const mirrorSaves = watchSaves(
+          awareness,
+          () => {
+            setSavedAt(Date.now())
+            setSaveError(null)
+          },
+          (reason) => setSaveError(reason),
+        )
+        const publishPeers = () => {
+          mirrorSaves()
+          setPeers(peersFrom(awareness))
+        }
         awareness.on('change', publishPeers)
         publishPeers()
       }
@@ -411,8 +430,12 @@ export function PaintEditor({ docId }: { docId: string }) {
       if (session === null || awareness === null || !isElected(awareness)) return
       if (orderOf(session.doc).length === 0) return
       void pushSnapshot('paint', docId, buildSnapshotBody(session.doc), 'application/json')
-        .then(() => setSavedAt(Date.now()))
-        .catch(() => undefined)
+        .then((failure) => {
+          if (sessionRef.current === session) publishSaveOutcome(awareness, failure)
+        })
+        .catch(() => {
+          if (sessionRef.current === session) publishSaveOutcome(awareness, 'connection failed')
+        })
     }, autosaveSeconds * 1000)
     return () => clearInterval(timer)
   }, [autosaveSeconds, docId, access])
@@ -530,7 +553,9 @@ export function PaintEditor({ docId }: { docId: string }) {
             )}
           </div>
           <div className="ml-auto flex items-center gap-3">
-            {canMutate && <SaveState connected={connected} lastSavedAt={savedAt} />}
+            {canMutate && (
+              <SaveState connected={connected} lastSavedAt={savedAt} error={saveError} />
+            )}
             <Button onClick={() => setHistoryOpen((open) => !open)}>History</Button>
           </div>
         </header>

@@ -13,15 +13,18 @@ export interface ToolsInfo {
   autosave_seconds: number
 }
 
+// Resolves to null when the server accepted the push, or to a short reason when it
+// refused it — the label must never claim "saved" for a refused push. Only transport
+// failures reject.
 export async function pushSnapshot(
   tool: string,
   docId: string,
   body: string,
   contentType: string,
   final = false,
-): Promise<boolean> {
+): Promise<string | null> {
   const token = getAccessToken()
-  if (token === null) return false
+  if (token === null) return 'no session'
   const response = await fetch(`/api/tools/${tool}/${docId}/snapshot`, {
     method: 'POST',
     keepalive: final && body.length < KEEPALIVE_LIMIT,
@@ -31,12 +34,20 @@ export async function pushSnapshot(
     },
     body,
   })
-  if (!response.ok) return false
-  const parsed: unknown = await response.json()
-  return (
-    typeof parsed === 'object' &&
-    parsed !== null &&
-    'version_written' in parsed &&
-    parsed.version_written === true
-  )
+  if (response.ok) return null
+  let detail = ''
+  try {
+    const parsed: unknown = await response.json()
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'detail' in parsed &&
+      typeof parsed.detail === 'string'
+    ) {
+      detail = parsed.detail
+    }
+  } catch {
+    // no JSON body — the status alone will have to name it
+  }
+  return detail === '' ? `HTTP ${String(response.status)}` : detail
 }
