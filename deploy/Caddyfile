@@ -56,6 +56,9 @@
 
 	handle_path /drawio/* {
 		root * /app/vendor/drawio
+		# No hash-named files in this tree, and an image upgrade can replace any of
+		# them under the same name — always revalidate (304 when unchanged).
+		header Cache-Control "no-cache"
 		file_server
 	}
 
@@ -65,6 +68,14 @@
 		# fetch is cross-origin. These are public static files; the API sends no such
 		# header, which is exactly what keeps sandboxed code away from it.
 		header Access-Control-Allow-Origin "*"
+		# A deploy replaces the page, the engine and the vendored interpreter under
+		# unchanging names, so every use must revalidate — an unchanged file answers
+		# 304 and costs no bytes. Only the hash-named build assets never change and
+		# are safe to cache hard.
+		@hashedSandbox path /assets/*
+		header @hashedSandbox Cache-Control "public, max-age=31536000, immutable"
+		@mutableSandbox not path /assets/*
+		header @mutableSandbox Cache-Control "no-cache"
 		# The page's own policy: code from here only, WebAssembly and eval allowed
 		# (executing the visitor's code is the feature), all other network dead.
 		@page path / /index.html
@@ -74,6 +85,12 @@
 
 	handle {
 		root * /app/web
+		# The pages themselves must revalidate (a deploy replaces them in place);
+		# the hash-named assets they reference never change and cache hard.
+		@hashedWeb path /assets/*
+		header @hashedWeb Cache-Control "public, max-age=31536000, immutable"
+		@mutableWeb not path /assets/*
+		header @mutableWeb Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}

@@ -11,8 +11,95 @@ const send = (message) => {
   if (IS_WORKER) self.postMessage(message)
   else window.__sandboxEngineReceive(message)
 }
+let stageName = 'starting'
 const stage = (name, detail) => {
+  stageName = name
   send(detail === undefined ? { out: 'stage', stage: name } : { out: 'stage', stage: name, detail })
+}
+// Progress rides on whatever stage is current, so a download shows up as
+// "loading the interpreter (pyodide.asm.wasm — 12 MB)" without changing the stage.
+const progress = (detail) => send({ out: 'stage', stage: stageName, detail })
+
+// Downloads dominate boot (the interpreter is tens of MB) and first runs (every
+// wheel an import pulls in), and a lossy connection can hang a fetch forever without
+// ever failing it. Every same-origin GET therefore goes through this wrapper: the
+// body is read chunk by chunk so progress reaches the stage line, a transfer that
+// moves no bytes for STALL_MS aborts, and a failed transfer restarts from scratch a
+// few times before the error — carrying the file's name — reaches the caller.
+const STALL_MS = 20000
+const TRANSFER_ATTEMPTS = 3
+const nativeFetch = globalThis.fetch.bind(globalThis)
+
+const transferOnce = async (url, name, init) => {
+  const aborter = new AbortController()
+  let timer = 0
+  const arm = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      aborter.abort(new Error('no data for 20 s'))
+    }, STALL_MS)
+  }
+  try {
+    arm()
+    const response = await nativeFetch(url, { ...init, signal: aborter.signal })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    if (response.body === null) return response
+    const reader = response.body.getReader()
+    const chunks = []
+    let received = 0
+    let reportedMb = 0
+    for (;;) {
+      arm()
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      received += value.length
+      const mb = Math.floor(received / 1048576)
+      if (mb > reportedMb) {
+        reportedMb = mb
+        progress(`${name} — ${mb} MB`)
+      }
+    }
+    const bytes = new Uint8Array(received)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.length
+    }
+    // A rebuilt Response: the browser decodes network bodies only, so the original
+    // headers must not travel — just the content type, which WebAssembly's
+    // streaming compile checks.
+    return new Response(bytes, {
+      status: response.status,
+      headers: { 'Content-Type': response.headers.get('Content-Type') ?? '' },
+    })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+globalThis.fetch = async (input, init) => {
+  const url =
+    typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
+  // Callers holding their own abort signal keep native semantics untouched.
+  if (!url.startsWith(BASE) || method.toUpperCase() !== 'GET' || init?.signal !== undefined) {
+    return nativeFetch(input, init)
+  }
+  const name = url.slice(BASE.length)
+  let failure = 'failed'
+  for (let attempt = 1; attempt <= TRANSFER_ATTEMPTS; attempt += 1) {
+    try {
+      return await transferOnce(url, name, init)
+    } catch (cause) {
+      failure = cause instanceof Error ? cause.message : String(cause)
+      if (attempt < TRANSFER_ATTEMPTS) {
+        progress(`${name} — retrying (attempt ${attempt + 1} of ${TRANSFER_ATTEMPTS})`)
+        await new Promise((resolve) => setTimeout(resolve, 1500 * attempt))
+      }
+    }
+  }
+  throw new Error(`${name}: ${failure}`)
 }
 const stdout = (text) => send({ out: 'stdout', text })
 const stderr = (text) => send({ out: 'stderr', text })
@@ -321,7 +408,9 @@ const runFile = async (path, files) => {
   if (path.endsWith('.js')) {
     runJavascript(source)
   } else {
+    stage('loading packages')
     await pyodide.loadPackagesFromImports(source)
+    stage('ready')
     const runner = pyodide.globals.get('_sandbox_run')
     try {
       runner(path)

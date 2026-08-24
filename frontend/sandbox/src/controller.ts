@@ -141,7 +141,20 @@ interface Engine {
 
 let engine: Engine | null = null
 
+// A stalled boot is otherwise indistinguishable from a slow one: the engine reports
+// progress only for fetches, and a hung module import or wasm compile reports
+// nothing at all. Sixty silent seconds while still booting earn one visible hint.
+let lastEngineMessageAt = Date.now()
+let bootHintWritten = false
+setInterval(() => {
+  if (engineState !== 'booting' || bootHintWritten) return
+  if (Date.now() - lastEngineMessageAt < 60_000) return
+  bootHintWritten = true
+  writeOutput('\nstill loading — the connection looks slow or stalled. Stop, then Start, retries.\n')
+}, 15_000)
+
 function handleEngineMessage(message: EngineMessage): void {
+  lastEngineMessageAt = Date.now()
   switch (message.out) {
     case 'stage':
       setStage(message.stage ?? 'working', message.detail)
@@ -176,7 +189,7 @@ function handleEngineMessage(message: EngineMessage): void {
       break
     case 'fatal':
       setStage('failed', message.text ?? 'unknown')
-      writeOutput(`\nsandbox failed: ${message.text ?? 'unknown'}\n`)
+      writeOutput(`\nsandbox failed: ${message.text ?? 'unknown'} — press Stop, then Start, to retry.\n`)
       break
   }
 }

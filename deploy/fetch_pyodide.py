@@ -8,6 +8,7 @@ that is the point of baking all of this in.
 
 import hashlib
 import json
+import os
 import sys
 import urllib.request
 from pathlib import Path
@@ -28,10 +29,18 @@ RUNTIME_FILES = (
 )
 
 
+# Cache validators (Last-Modified, ETag) derive from file timestamps. A rebuilt image
+# must serve byte-identical files with identical validators, or every rebuild forces
+# the full runtime back through every browser - so the stamp is fixed, and it moves
+# only when the pinned version (and with it the bytes) changes.
+STAMP = 946684800  # 2000-01-01T00:00:00Z
+
+
 def download(url: str, target: Path) -> bytes:
     with urllib.request.urlopen(url, timeout=120) as response:  # noqa: S310 - pinned https URL
         content = response.read()
     target.write_bytes(content)
+    os.utime(target, (STAMP, STAMP))
     return content
 
 
